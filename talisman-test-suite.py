@@ -51,8 +51,8 @@ base_model = load_base_model('InceptionV3')
 data_dir = './research/ssu_ct-scans/paper-rescale-full'
 tmp_dir = './research/ssu_ct-scans/tmp/'
 log_dir = tmp_dir + 'logs/'
-bottleneck_file = tmp_dir + base_model.name + '-bottlenecks.txt'
-class_file = tmp_dir + base_model.name + '-retrained-classes.txt'
+bottleneck_file = tmp_dir + base_model.name + '-bottlenecks-paper-rescale-full.csv'
+class_file = tmp_dir + base_model.name + '-retrained-classes-paper-rescale-full.csv'
 groups_file = './research/ssu_ct-scans/paper-rescale-full-patient-groups.csv' # csv -> file_name,group
 
 # get bottlenecks and classes
@@ -62,17 +62,17 @@ bottlenecks, classes = create_bottlenecks(
         bottleneck_file, class_file, data_dir, base_model, groups)
 
 # perform tests
-cross_validate = False
+cross_validate = True
 if not cross_validate:
     train_and_evaluate_final_layers(
             base_model, bottlenecks, tmp_dir, log_dir, 
-            learning_rate=0.001, dropout_rate=0.6, epochs=20, batch_size=20, test_size=0.2,
+            learning_rate=0.001, dropout_rate=0.7, epochs=20, batch_size=20, test_size=0.2,
             save_model=False)
 else:
     k_fold_cross_validate(
             base_model, bottlenecks, classes, num_folds=5, 
-            learning_rate=0.001, dropout_rate=0.6, epochs=20, batch_size=20,
-            summarize_model=True, summarize_misclassified_images=True)
+            learning_rate=0.001, dropout_rate=0.7, epochs=20, batch_size=20,
+            summarize_model=True, summarize_misclassified_images=False)
 
 K.clear_session() # prevent TensorFlow error message
 

@@ -33,7 +33,7 @@ bottlenecks, classes = create_bottlenecks(
         bottleneck_file, class_file, data_dir, base_model, groups)
 
 # perform tests
-cross_validate = False
+cross_validate = True
 if not cross_validate:
     train_and_evaluate_final_layers(
             base_model, bottlenecks, tmp_dir, log_dir, 

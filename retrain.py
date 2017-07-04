@@ -153,7 +153,7 @@ def create_bottlenecks(bottleneck_file, class_file, data_dir, base_model, groups
 
 
 def create_final_layers(base_model, num_classes, learning_rate=0.001, dropout_rate=0.5):
-    """ Returns a model that is meant to be trained on features from 'base_model'.
+    """Returns a model that is meant to be trained on features from 'base_model'.
     
     Inputs:
         base_model: model used to generate features, it's assumed the model's output is a vector
@@ -206,6 +206,7 @@ def train_and_evaluate_final_layers(
         test_size (optional): proportion of data to be used for testing
         save_model (optional): if True, the 'base_model' and trained final layers are saved as a complete model in 'tmp_dir'
     """
+
     #file_names = bottlenecks[:, 0]
     class_numbers = bottlenecks[:, 1].astype(int)
     #class_labels = bottlenecks[:, 2]
@@ -219,10 +220,11 @@ def train_and_evaluate_final_layers(
         train_features, validation_features, train_labels, validation_labels = \
                 train_test_split(features, class_numbers, test_size=test_size)
     else:
-        train, validate = GroupShuffleSplit(test_size=test_size).split(features, class_numbers, group_labels)
-        print(validate)
+        train, validate = GroupShuffleSplit(n_splits=2, test_size=test_size).split(
+                features, class_numbers, group_labels)
         train_features, validation_features, train_labels, validation_labels = \
-                features[train], features[validate], class_numbers[train], class_numbers[validate]
+                features[train[0]], features[validate[0]], \
+                class_numbers[train[0]], class_numbers[validate[0]]
 
     # do one hot encoding for labels
     train_labels_one_hot, validation_labels_one_hot = to_categorical(train_labels), to_categorical(validation_labels)
@@ -311,7 +313,8 @@ def k_fold_cross_validate(
         print('\nPerforming group ', num_folds, '-fold cross validation...', sep='')
         kf = GroupKFold(n_splits=num_folds)
     fold = 1
-    for train, test in kf.split(features, class_numbers):
+    # kf.split will ignore group_labels if kf is StratifiedKFold
+    for train, test in kf.split(features, class_numbers, group_labels):
         print("Fold ", fold, "/", num_folds, sep='')
         fold += 1
 
