@@ -15,7 +15,7 @@ from keras.models import Model, Sequential
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.np_utils import to_categorical
 
-from report import save_model_summary, print_cm
+from report import save_model_summary, print_confusion_matrix, print_model_info
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, GroupShuffleSplit, GroupKFold
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -145,6 +145,7 @@ def create_bottlenecks(bottleneck_file, class_file, data_dir, base_model, groups
     else:
         print("Bottlenecks already exist.")
         
+    print("Loading bottlenecks...")
     bottlenecks = np.loadtxt(bottleneck_file, delimiter=',', dtype='U')
     classes = np.loadtxt(class_file, delimiter=',', dtype='U')
     print("Bottlenecks loaded.\n")
@@ -220,14 +221,17 @@ def train_and_evaluate_final_layers(
         train_features, validation_features, train_labels, validation_labels = \
                 train_test_split(features, class_numbers, test_size=test_size)
     else:
-        train, validate = GroupShuffleSplit(n_splits=2, test_size=test_size).split(
-                features, class_numbers, group_labels)
+        train, validate = next(GroupShuffleSplit(n_splits=2, test_size=test_size).split(
+                features, class_numbers, group_labels))
         train_features, validation_features, train_labels, validation_labels = \
-                features[train[0]], features[validate[0]], \
-                class_numbers[train[0]], class_numbers[validate[0]]
+                features[train], features[validate], \
+                class_numbers[train], class_numbers[validate]
 
     # do one hot encoding for labels
     train_labels_one_hot, validation_labels_one_hot = to_categorical(train_labels), to_categorical(validation_labels)
+
+    print_class_balance(class_labels, class_numbers, 
+                        [train_labels, validation_labels], ["Train","Validate"])
 
     # create final layers model
     final_layers = create_final_layers(
@@ -252,17 +256,8 @@ def train_and_evaluate_final_layers(
         validation_data=(validation_features, validation_labels_one_hot),
         verbose=1)
 
-    #print_parameter_summary()
-    #print_model_summary()
-    print('\n--- Hyperparameter & Model Summary ---')
-    print("Batch Size:", batch_size)
-    print("Epochs:", epochs)
-    print("Initial Learning Rate:", learning_rate)
-    print("Dropout Rate:", dropout_rate)
-    print("Optimizer:", final_layers.optimizer)
-    print("Optimizer Config:", final_layers.optimizer.get_config())
-    print("Final Layers:")
-    final_layers.summary()
+    # training parameters/config summary
+    print_model_info(batch_size, epochs, learning_rate, dropout_rate, final_layers)
 
     # create and save complete retrained model 
     if save_model:
@@ -349,20 +344,11 @@ def k_fold_cross_validate(
 
     # confusion matrix
     cm = confusion_matrix(actual_classes, predicted_classes)
-    print_cm(cm, classes[:,0])
+    print_confusion_matrix(cm, classes[:,0])
 
     # training parameters/config summary
     if summarize_model:
-        print('\n--- Hyperparameter & Model Summary ---')
-        print("Batch Size:", batch_size)
-        print("Epochs:", epochs)
-        print("Learning Rate:", learning_rate)
-        print("Dropout Rate:", dropout_rate)
-        print("Optimizer:", model.optimizer)
-        print("Optimizer Config:", model.optimizer.get_config())
-        #print("Model Config:", model.get_config())
-        print("Final Layers:")
-        model.summary()
+        print_model_info(batch_size, epochs, learning_rate, dropout_rate, model)
 
     # misclassified files
     if summarize_misclassified_images:
