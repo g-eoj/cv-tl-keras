@@ -230,7 +230,8 @@ def train_and_evaluate_final_layers(
     train_labels_one_hot, validation_labels_one_hot = to_categorical(train_labels), to_categorical(validation_labels)
 
     # create final layers model
-    final_layers = create_final_layers(base_model, num_classes, learning_rate=learning_rate, dropout_rate=dropout_rate)
+    final_layers = create_final_layers(
+            base_model, num_classes, learning_rate=learning_rate, dropout_rate=dropout_rate)
 
     # callbacks
     tensorboard = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=0, batch_size=20, 
@@ -322,12 +323,14 @@ def k_fold_cross_validate(
         file_names_test.extend(file_names[test])
 
         model = None # reset the model for each fold
-        model = create_final_layers(base_model, num_classes, dropout_rate=0.8)
-        model.fit(features[train], to_categorical(class_numbers[train]),
-                batch_size = batch_size,
-                epochs = epochs,
-                shuffle=True,
-                verbose = 2)
+        model = create_final_layers(
+                base_model, num_classes, learning_rate=learning_rate, dropout_rate=dropout_rate)
+        model.fit(features[train], 
+                  to_categorical(class_numbers[train]),
+                  batch_size = batch_size,
+                  epochs = epochs,
+                  shuffle=True,
+                  verbose = 2)
 
         predictions = model.predict(features[test])
         predicted_classes.extend(np.argmax(predictions, axis=1))
