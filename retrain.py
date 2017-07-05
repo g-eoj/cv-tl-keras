@@ -15,7 +15,7 @@ from keras.models import Model, Sequential
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.np_utils import to_categorical
 
-from report import save_model_summary, print_confusion_matrix, print_model_info
+from report import save_model_summary, print_confusion_matrix, print_model_info, print_class_balance
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, GroupShuffleSplit, GroupKFold
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -210,7 +210,7 @@ def train_and_evaluate_final_layers(
 
     #file_names = bottlenecks[:, 0]
     class_numbers = bottlenecks[:, 1].astype(int)
-    #class_labels = bottlenecks[:, 2]
+    class_labels = bottlenecks[:, 2]
     group_labels = bottlenecks[:, 3]
     features = bottlenecks[:, 4:].astype(float)
 
@@ -291,7 +291,7 @@ def k_fold_cross_validate(
 
     file_names = bottlenecks[:, 0]
     class_numbers = bottlenecks[:, 1].astype(int)
-    #class_labels = bottlenecks[:, 2]
+    class_labels = bottlenecks[:, 2]
     group_labels = bottlenecks[:, 3]
     features = bottlenecks[:, 4:].astype(float)
 
@@ -300,6 +300,8 @@ def k_fold_cross_validate(
     prediction_scores = []
     accuracy_scores = []
     file_names_test = []
+    folds = []
+    fold_names = []
     num_classes = len(set(class_numbers))
 
     if group_labels[0] == '':
@@ -312,10 +314,12 @@ def k_fold_cross_validate(
     # kf.split will ignore group_labels if kf is StratifiedKFold
     for train, test in kf.split(features, class_numbers, group_labels):
         print("Fold ", fold, "/", num_folds, sep='')
-        fold += 1
 
         actual_classes.extend(class_numbers[test])
         file_names_test.extend(file_names[test])
+        folds.append(class_numbers[test])
+        fold_names.append("Fold " + str(fold))
+        fold += 1
 
         model = None # reset the model for each fold
         model = create_final_layers(
@@ -332,6 +336,9 @@ def k_fold_cross_validate(
         prediction_scores.extend(np.amax(predictions, axis=1))
         accuracy_scores.append(accuracy_score(class_numbers[test], np.argmax(predictions, axis=1)))
         print('Accuracy:', round(accuracy_scores[-1], 4), '\n')
+
+    print_class_balance(class_labels, class_numbers, 
+                        folds, fold_names)
 
     print('--- ', num_folds, '-Fold Cross Validation Results ---', sep='')
 
