@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import os
 import os.path
@@ -49,7 +50,10 @@ def load_base_model(model_name, input_shape=None):
 
 
 def group_dict(groups_file):
-    """Returns dictionary of group membership."""
+    """Returns dictionary of group membership, where the keys are file names.
+
+    input: file path to csv which have rows with the format: file_name,group
+    """
 
     print("Loading groups...")
     _ = np.loadtxt(groups_file, delimiter=',', dtype='U')
@@ -84,35 +88,37 @@ def preprocess_input_wrapper(x):
     return X[0]
 
 
-def create_bottlenecks(bottleneck_file, class_file, data_dir, base_model, groups=None):
+def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
     """Returns numpy array of bottlenecks.
 
-    Loads and returns 'bottleneck_file' and 'class_file' as numpy arrays. 
-    If 'bottleneck_file' does not exist, features are generated using 'base_model' 
-    and a new 'bottleneck_file' and 'class_file' are saved. Note the returned numpy arrays 
-    have dtype=string.  When extracting column contents, typecast column contents to 
-    the appropriate data type:
-
-        file_names = bottlenecks[:, 0]
-        class_numbers = bottlenecks[:, 1].astype(int)
-        class_labels = bottlenecks[:, 2]
-        group_labels = bottlenecks[:, 3]
-        features = bottlenecks[:, 4:].astype(float)
-
-    bottleneck_file column contents:
-    file_name(string), class_number(int), class_label(string), group_label(string), features(float)...
-
-    class_file column contents:
-    class_label(string), class_number(int)
-
+    Uses h5py to load and return a 'bottleneck_file' which uses the HDF5 data 
+    format. If 'bottleneck_file' does not exist, features are generated 
+    using a Keras 'base_model', and a new 'bottleneck_file' is saved.
+    
     Inputs:
-        bottleneck_file, class_file: paths to csv files
-        data_dir: path to directory of images used to calculate bottlenecks (images are in folders for each class)
-        base_model: model used to generate features, it's assumed the model's output is a vector
-        img_height, img_width: input dimensions for base_model
-        groups (optional): dictionary where key=file_name and value=group_label
+        bottleneck_file: path to h5 file
+        data_dir: path to directory of images used to calculate features 
+            (where images are in a subdirectory for each class)
+        base_model: Keras model used to generate features
+        groups (optional): list of file paths to csvs which 
+            have rows with the format: file_name,group
 
-    Returns: numpy arrays of 'bottleneck_file' and 'class_file' with dtype=string
+    Returns: h5py file object 
+        h5py file objects work like a dictionary. For example 
+            bottlenecks['features'][:] 
+        returns a numpy array of the features. The keys available are:
+        'base_model' -> base_model.name
+        'features_layer' -> base_model.layers[-1].name
+        'file_names' -> np.array(file_names, dtype='S')
+        'class_numbers' -> class_numbers (numpy array)
+        'class_labels' -> np.array(class_labels, dtype='S')
+        'classes' -> np.array(classes, dtype='S')
+        'features' -> features (numpy array)
+        'blank_groups' -> numpy array, used for sklearn's cross validation
+        plus each group type gets a key, for example the groups file
+            patient_groups.csv
+        will cause creation of the key
+            'patient_groups'
     """
 
     print('Generating bottlenecks...')
@@ -136,130 +142,128 @@ def create_bottlenecks(bottleneck_file, class_file, data_dir, base_model, groups
             shuffle=False)
 
         # Keras orders classes alphanumerically
-        class_label_names = sorted(images.class_indices.keys()) 
+        classes = sorted(images.class_indices.keys()) 
 
         file_names = images.filenames
         class_numbers = images.classes
         class_labels = []
         for number in class_numbers:
-            class_labels.append(class_label_names[number])
-        group_labels = []
-        if groups is not None:
-            for name in file_names:
-                group_labels.append(groups[name])
-        else:
-            for name in file_names:
-                group_labels.append('')
+            class_labels.append(classes[number])
         features = base_model.predict_generator(images, images.samples, verbose=1)
 
-        bottlenecks = np.hstack((np.array(file_names).reshape((-1,1)), 
-                                 class_numbers.reshape((-1,1)), 
-                                 np.array(class_labels).reshape((-1,1)), 
-                                 np.array(group_labels).reshape((-1,1)),
-                                 features))
-        np.savetxt(bottleneck_file, bottlenecks, delimiter=',', fmt='%s')
+        bottlenecks = h5py.File(bottleneck_file, 'w')
+        bottlenecks.attrs['base_model'] = base_model.name
+        bottlenecks.attrs['features_layer'] = base_model.layers[-1].name
+        bottlenecks.create_dataset('file_names', data=np.array(file_names, dtype='S'))
+        bottlenecks.create_dataset('class_numbers', data=class_numbers)
+        bottlenecks.create_dataset('class_labels', data=np.array(class_labels, dtype='S'))
+        bottlenecks.create_dataset('classes', data=np.array(classes, dtype='S'))
+        bottlenecks.create_dataset('features', data=features)
 
-        class_label_encoding = sorted(images.class_indices.items(), key=lambda x:x[1])
-        np.savetxt(class_file, class_label_encoding, delimiter=',', fmt='%s')
-        
+        # blank group labels sometimes required for the way sklearn's cross validation is called
+        group_labels = ['' for name in file_names]
+        bottlenecks.create_dataset('blank_groups', data=np.array(group_labels, dtype='S'))
+        for groups_file in groups_files:
+            groups_type = groups_file.split('/')[-1].split('.')[0]
+            groups = group_dict(groups_file)
+            group_labels = [groups[name] for name in file_names] 
+            bottlenecks.create_dataset(groups_type, data=np.array(group_labels, dtype='S'))
+
+        bottlenecks.close()
     else:
         print("Bottlenecks already exist.")
         
     print("Loading bottlenecks...")
-    bottlenecks = np.loadtxt(bottleneck_file, delimiter=',', dtype='U')
-    classes = np.loadtxt(class_file, delimiter=',', dtype='U')
+    bottlenecks = h5py.File(bottleneck_file, 'r')
     print(bottleneck_file, "loaded.")
 
-    return bottlenecks, classes
+    return bottlenecks
 
 
-def create_final_layers(base_model, num_classes, optimizer=None, learning_rate=0.001, dropout_rate=0.5):
-    """Returns a model that is meant to be trained on features from 'base_model'.
+def create_final_layers(base_model, num_classes, 
+        optimizer=None, learning_rate=0.001, dropout_rate=0.5):
+    """Returns a Keras model that is meant to be trained with features 
+    from 'base_model'.
     
     Inputs:
-        base_model: model used to generate features, it's assumed the model's output is a vector
+        base_model: Keras model used to generate features, it's assumed the 
+            model's output is a vector
         num_classes: int, count of the number of classes in training data
-        optimizer (optional)
+        optimizer (optional): Keras optimizer
         learning_rate (optional)
         dropout_rate (optional)
 
-    Returns: trainable model 
+    Returns: trainable Keras model 
     """
 
     # setup final layers using sequential model
-    final_layers = Sequential(name='final_layers')
-    final_layers.add(Dense(
+    model = Sequential(name='final_layers')
+    model.add(Dense(
         base_model.output_shape[1] // 2, 
         activation='relu', 
         input_shape=base_model.output_shape[1:]))
-    final_layers.add(Dropout(dropout_rate))
-    final_layers.add(Dense(num_classes, activation='softmax'))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(num_classes, activation='softmax'))
 
-    '''
-    ft = True
-    if ft:
-        input_shape = None
-        model = load_base_model('InceptionV3', input_shape)
-        inputs = [model.get_layer('conv2d_73').input, 
-                  model.get_layer('conv2d_71').input, 
-                  model.get_layer('max_pooling2d_4').input]
-        x = model.output
-        x = Dense(1024, activation='relu')(inputs)
-        x = Dropout(dropout_rate)(x)
-        predictions = Dense(num_classes, activation='softmax')(x)
-        final_layers = Model(inputs=inputs, outputs=predictions, name='final_layers')
-    '''
-
-
-    '''
-    # setup final layers using funcional API
-    inputs = Input(shape=base_model.output_shape[1:])
-    x = Dense(1024, activation='relu')(inputs)
-    x = Dropout(dropout_rate)(x)
-    predictions = Dense(num_classes, activation='softmax')(x)
-    final_layers = Model(inputs=inputs, outputs=predictions, name='final_layers')
-    '''
-
+    # setup final layers using funcional API and return whole model
+    #inputs = Input(shape=base_model.output_shape[1:])
+    #x = Dense(base_model.output_shape[1] // 2, activation='relu')(inputs)
+    #x = Dropout(dropout_rate)(x)
+    #predictions = Dense(num_classes, activation='softmax')(x)
+    #model = Model(inputs=inputs, outputs=predictions, name='final_layers')
+        
     # compile the final layers model
     if optimizer is None:
         optimizer = keras.optimizers.Adam(lr=learning_rate)
-    final_layers.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
 
-    return final_layers
+    return model
 
 
 def train_and_evaluate(
-        base_model, bottlenecks, tmp_dir, log_dir, test_size=0.1, use_groups=True, use_weights=False,
-        optimizer=None, learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
-        save_model=False):
+        base_model, bottlenecks, tmp_dir, log_dir, 
+        test_size=0.1, groups=None, use_weights=False,
+        optimizer=None, learning_rate=0.001, dropout_rate=0.5, epochs=10, 
+        batch_size=32, save_model=False):
     """Use a train-test split to evaluate final layers in transfer learning. 
     
-    Prints training and results summary. If group labels exist, the train-test split will be by group.
+    Prints training and results summary. If group labels exist, the train-test 
+    split will be on groups.
 
     Inputs:
-        base_model: model used to generate features, it's assumed the model's output is a vector
-        bottlenecks: numpy array of bottlenecks generated by 'create_bottlenecks' function
+        base_model: Keras model used to generate features, it's assumed the 
+            model's output is a vector
+        bottlenecks: h5py file object returned by 'create_bottlenecks' function
         tmp_dir: path, trained model is saved here when 'save_model' is True
         log_dir: path, tensorboard logs are saved here
         test_size (optional): proportion of data to be used for testing
-        optimizer (optional): optimizer to use when training final layers
+        groups (optional): string, key used to get groups data from 
+            'bottlenecks', for example, to use data from the groups file 
+            'patient_groups.csv' the key should be 'patient_groups'
+        use_weights (optional): use class balance to scale the loss function 
+            during training
+        optimizer (optional): Keras optimizer to use when training final layers
         learning_rate (optional): model hyperparameter
         dropout_rate (optional): model hyperparameter
         epochs (optional): training parameter
         batch_size (optional): training parameter
-        save_model (optional): if True, the 'base_model' and trained final layers are saved as a complete model in 'tmp_dir'
+        save_model (optional): if True, the 'base_model' and trained final 
+            layers are combined and saved as a complete model in 'tmp_dir'
     """
 
-    #file_names = bottlenecks[:, 0]
-    class_numbers = bottlenecks[:, 1].astype(int)
-    class_labels = bottlenecks[:, 2]
-    group_labels = bottlenecks[:, 3]
-    features = bottlenecks[:, 4:].astype(float)
+    class_numbers = bottlenecks["class_numbers"][:]
+    class_labels = bottlenecks["class_labels"][:].astype(str)
+    if groups is not None:
+        group_labels = bottlenecks[groups][:].astype(str)
+    else:
+        group_labels = bottlenecks["blank_groups"][:].astype(str)
+    features = bottlenecks["features"][:]
+    bottlenecks.close()
 
-    num_classes = len(set(class_numbers))
+    num_classes = len(np.unique(class_numbers))
     
     # split bottlenecks into train and validation sets
-    if group_labels[0] == '' or not use_groups:
+    if group_labels[0] == '':
         train_features, validation_features, train_labels, validation_labels = \
                 train_test_split(features, class_numbers, test_size=test_size)
     else:
@@ -270,7 +274,8 @@ def train_and_evaluate(
                 class_numbers[train], class_numbers[validate]
 
     # do one hot encoding for labels
-    train_labels_one_hot, validation_labels_one_hot = to_categorical(train_labels), to_categorical(validation_labels)
+    train_labels_one_hot, validation_labels_one_hot = \
+            to_categorical(train_labels), to_categorical(validation_labels)
 
     print()
     print_class_balance(class_labels, class_numbers, 
@@ -278,16 +283,16 @@ def train_and_evaluate(
 
     # create final layers model
     final_layers = create_final_layers(
-            base_model, num_classes, optimizer=optimizer, learning_rate=learning_rate, dropout_rate=dropout_rate)
+            base_model, num_classes, optimizer=optimizer, 
+            learning_rate=learning_rate, dropout_rate=dropout_rate)
 
     # callbacks
-    tensorboard = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=0, batch_size=20, 
-          write_graph=False, write_images=False)
-
-    reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                  patience=5, verbose=1)
-
-    early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=15, verbose=1, mode='auto')
+    tensorboard = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=0, 
+            batch_size=20, write_graph=False, write_images=False)
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', 
+            factor=0.5, patience=4, verbose=1)
+    early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, 
+            patience=15, verbose=1, mode='auto')
 
     class_weight = None
     if use_weights:
@@ -310,7 +315,6 @@ def train_and_evaluate(
 
     predictions = final_layers.predict(validation_features)
     prediction_labels = np.argmax(predictions, axis=1)
-    #prediction_scores = np.amax(predictions, axis=1)
     f1_scores = f1_score(
             validation_labels, 
             prediction_labels,
@@ -331,7 +335,7 @@ def train_and_evaluate(
     # wip - create and save complete retrained model, suitable for fine-tuning 
     if save_model:
         x = base_model.output
-        x = Dense(1024, activation='relu')(x)
+        x = Dense(base_model.output_shape[1] // 2, activation='relu')(x)
         x = Dropout(dropout_rate)(x)
         predictions = Dense(num_classes, activation='softmax', name='predictions')(x)
         model = Model(inputs=base_model.input, outputs=predictions)
@@ -340,69 +344,21 @@ def train_and_evaluate(
             pretrained_weights = layer.get_weights()
             model.layers[-i].set_weights(pretrained_weights)
 
-        #for i, layer in enumerate(base_model.layers):
-        #       print(i, layer.name)
-
-        # so last two inception blocks can be fine-tuned
-        for layer in model.layers[:249]:
-            layer.trainable = False
-        for layer in model.layers[249:]:
-            layer.trainable = True
-
         # slow learning rate for fine-tuning
         from keras.optimizers import SGD
         model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
 
         model.save(tmp_dir + base_model.name + '-retrained-model.h5')
         print("\nModel saved to:", tmp_dir + base_model.name + '-retrained-model.h5')
+        # TODO save txt file of class:number for use in prediction
         # capture retrained model architecture with final layers
         save_model_summary(tmp_dir + base_model.name + '-retrained-model-summary.txt', model)
 
-    # wip - fine-tuning
-    fine_tune = False # temporary
-    if fine_tune:
-
-        if base_model.name in ('inception_v3'):
-            preprocess_input = inception_v3_preprocess_input
-        elif base_model.name in ('vgg16', 'vgg19', 'resnet50'):
-            preprocess_input = preprocess_input_wrapper
-        else:
-            print(base_model.name, "preprocessing function not found. Exiting.")
-            return
-        
-        img_height, img_width = base_model.input_shape[1], base_model.input_shape[2]
-        datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
-        images = datagen.flow_from_directory(
-            data_dir,
-            target_size=(img_height, img_width),
-            batch_size=1,
-            class_mode='categorical',
-            shuffle=False)
-
-        print("Fine-tuning the following layers:")
-        model = Model(inputs=base_model.input, outputs=final_layers(base_model.output))
-        for i, layer in enumerate(model.layers):
-            if i >= 249:
-                print(i, layer.name)
-
-        for layer in model.layers[:249]:
-            layer.trainable = False
-        for layer in model.layers[249:]:
-            layer.trainable = True
-
-        from keras.optimizers import SGD
-        model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
-
-        model.fit(images[train], train_labels_one_hot,
-            batch_size=batch_size,
-            epochs=epochs,
-            shuffle=True,
-            validation_data=(images[train], validation_labels_one_hot),
-            verbose=1)
-
 
 def group_k_fold(num_folds, features, class_numbers, group_labels):
-    """Returns indexes for random folds, has issues if group sizes are imbalanced..."""
+    """Work in progress, returns indexes for random folds, has issues if 
+    group sizes are imbalanced...
+    """
 
     classes = np.unique(class_numbers)
     #np.random.shuffle(classes)
@@ -426,35 +382,48 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
 
 
 def cross_validate(
-        base_model, bottlenecks, classes, 
-        num_folds=5, logo=False, use_weights=False, resample=None,
-        optimizer=None, learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
+        base_model, bottlenecks, groups=None, num_folds=5, 
+        logo=False, use_weights=False, resample=None, optimizer=None, 
+        learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
         summarize_model=True, summarize_misclassified_images=False):
     """Use cross validation to evaluate final layers in transfer learning. 
     
-    Prints validation and results summary. If group labels exist, the folds will split by group.
+    Prints validation and results summary. If group labels exist, the folds 
+    will split on groups.
 
     Inputs:
-        base_model: model used to generate features, it's assumed the model's output is a vector
-        bottlenecks: numpy array of bottlenecks generated by 'create_bottlenecks' function
-        classes: numpy array of class names/numbers generated by 'create_bottlenecks' function 
+        base_model: Keras model used to generate features, it's assumed the 
+            model's output is a vector
+        bottlenecks: h5py file object returned by 'create_bottlenecks' function
+        groups (optional): string, key used to get groups data from 
+            'bottlenecks', for example, to use data from the groups file 
+            'patient_groups.csv' the key should be 'patient_groups'
         num_folds (optional): number of folds to use
         logo (optional): do leave one group out cross validation
-        use_weights (optional): use class balance to scale the loss function during training
-        optimizer (optional): optimizer to use when training final layers
+        use_weights (optional): use class balance to scale the loss function 
+            during training
+        resample: float, oversamples so that the number of training samples in
+            each class is equal to (reasample * largest training class size)
+        optimizer (optional): Keras optimizer to use when training final layers
         learning_rate (optional): model hyperparameter
         dropout_rate (optional): model hyperparameter
         epochs (optional): training parameter
         batch_size (optional): training parameter
         summarize_model (optional): prints hyperparamter and model summary
-        summarize_misclassified_images (optional): prints list of misclassified images
+        summarize_misclassified_images (optional): prints list of 
+            misclassified images
     """
 
-    file_names = bottlenecks[:, 0]
-    class_numbers = bottlenecks[:, 1].astype(int)
-    class_labels = bottlenecks[:, 2]
-    group_labels = bottlenecks[:, 3]
-    features = bottlenecks[:, 4:].astype(float)
+    classes = bottlenecks["classes"][:].astype(str)
+    file_names = bottlenecks["file_names"][:].astype(str)
+    class_numbers = bottlenecks["class_numbers"][:]
+    class_labels = bottlenecks["class_labels"][:].astype(str)
+    if groups is not None:
+        group_labels = bottlenecks[groups][:].astype(str)
+    else:
+        group_labels = bottlenecks["blank_groups"][:].astype(str)
+    features = bottlenecks["features"][:]
+    bottlenecks.close()
 
     actual_classes = []
     predicted_classes =[]
@@ -495,7 +464,7 @@ def cross_validate(
         #print("File count of intersection  of test and train:", len(set(file_names[test]) & set(file_names[train])))
         if resample is not None:
             uniques, counts = np.unique(class_numbers[train], return_counts=True)
-            print("Balancing classes in training set with oversampling.")
+            print("Oversampling to balance classes in training set.")
             print("Training set sizes will be at least ", 
                   resample, " times max training set class size of ", max(counts), ".", sep='')
             class_counts = dict(zip(uniques, counts))
@@ -553,7 +522,7 @@ def cross_validate(
                 class_numbers[test], 
                 predicted_classes_this_split, 
                 average=None, 
-                labels=classes[:,1])
+                labels=range(len(classes)))
         print('Accuracy:', round(accuracy_scores[-1], 4))
         print('F1 Scores:', f1_scores)
         cm = confusion_matrix(
@@ -561,7 +530,7 @@ def cross_validate(
                 predicted_classes_this_split,
                 labels=np.unique(class_numbers))
         split_metrics[split_name] = [accuracy_scores[-1], f1_scores, cm]
-        print_confusion_matrix(cm, classes[:,0], normalize=False)
+        print_confusion_matrix(cm, classes, normalize=False)
         print()
         #if i == 5: break
 
@@ -590,18 +559,17 @@ def cross_validate(
     print("Average F1 Score overall: %.4f | Standard Deviation: %.4f" % (np.mean(f1_avgs), np.std(f1_avgs)))
     print("Average F1 Score by class:", f1_avgs)
     print()
-    #print('\n', classification_report(actual_classes, predicted_classes, target_names=classes[:,0]))
 
     # confusion matrix
     cm = confusion_matrix(actual_classes, predicted_classes)
-    print_confusion_matrix(cm, classes[:,0])
+    print_confusion_matrix(cm, classes)
     print()
 
     # sanity check, should be the same as above
     #cm = np.zeros(cms[0].shape)
     #for a in cms:
     #    cm = np.add(cm, a)
-    #print_confusion_matrix(cm, classes[:,0])
+    #print_confusion_matrix(cm, classes)
     #print()
 
     # data summary by split
@@ -615,7 +583,7 @@ def cross_validate(
         for key in sorted(split_metrics.keys()):
             if split_metrics[key][0] < 0.7:
                 print("Groups Name:", key, "| Accuracy:", round(split_metrics[key][0], 4))
-                print_confusion_matrix(split_metrics[key][2], classes[:,0], normalize=False)
+                print_confusion_matrix(split_metrics[key][2], classes, normalize=False)
                 count += 1
                 print()
         print(count, "problem groups.\n")
@@ -641,6 +609,6 @@ def cross_validate(
         print('file_name predicted_class score')
         misclassified = np.argwhere(np.asarray(actual_classes) != np.asarray(predicted_classes))
         for m in misclassified:
-            print(file_names_test[m[0]], classes[:,0][predicted_classes[m[0]]], prediction_scores[m[0]]) 
+            print(file_names_test[m[0]], classes[predicted_classes[m[0]]], prediction_scores[m[0]]) 
         print()
 

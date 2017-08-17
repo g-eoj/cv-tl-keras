@@ -7,7 +7,10 @@ from collections import Counter
 
 
 def group_dict(groups_file):
-    """Returns dictionary of group membership."""
+    """Returns dictionary of group membership, where the keys are file names.
+
+    input: file path to csv which have rows with the format: file_name,group
+    """
 
     _ = np.loadtxt(groups_file, delimiter=',', dtype='U')
     groups = {}
@@ -17,11 +20,22 @@ def group_dict(groups_file):
     return groups
 
 
-def data_summary(data_dir, groups=None, verbose=False):
+def data_summary(data_dir, groups_file=None, verbose=False):
+    """Work in progress - prints summary of image data.
+
+    Note:
+    It's possible to use a groups_file that doesn't match the data_dir. 
+    This will mess up some of the counts.
+
+    Inputs:
+        data_dir: path to directory of images (where images are in a 
+            subdirectory for each class)
+        groups_file: file path to csv which have rows with the format: 
+            file_name,group
+
     """
-    data_dir: path
-    groups: dict
-    """
+
+    groups = group_dict(groups_file)
     print("Data Summary:", data_dir)
     class_names = [f for f in listdir(data_dir) if not os.path.isfile(os.path.join(data_dir, f))]
     class_names = sorted(class_names)
@@ -129,7 +143,7 @@ def print_model_info(batch_size, epochs, learning_rate, dropout_rate, model, bas
     print('--- Hyperparameter & Model Summary ---')
     if base_model is not None:
         print("Base Model:", base_model.name)
-        print("Feature Layer:", base_model.layers[-2].name)
+        print("Feature Layer:", base_model.layers[-1].name)
     print("Batch Size:", batch_size)
     print("Epochs:", epochs)
     #print("Learning Rate:", learning_rate)

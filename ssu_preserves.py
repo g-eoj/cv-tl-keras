@@ -1,6 +1,7 @@
 import exifread as EXIF
 import os.path
 import numpy as np
+import report
 from datetime import datetime
 from keras import backend as K
 from keras import optimizers
@@ -85,41 +86,39 @@ base_model = load_base_model('InceptionV3')
 #base_model = load_base_model('VGG16')
 
 # setup paths
-data_dir = './research/ssu_preserves/training_images_small'
-
+data_dir = './research/ssu_preserves/training_images'
 tmp_dir = './research/ssu_preserves/tmp/'
 log_dir = tmp_dir + 'logs/'
-class_file = tmp_dir + base_model.name + '-retrained-classes.txt'
-#groups_file = './research/ssu_preserves/image_groups.txt' # csv -> file_name,group
-camera_groups_file = './research/ssu_preserves/camera_groups.csv' # csv -> file_name,group
-capture_event_groups_file = './research/ssu_preserves/capture_event_groups.csv' # csv -> file_name,group
+camera_groups_file = './research/ssu_preserves/camera_groups.csv' # csv: file_name,group
+capture_event_groups_file = './research/ssu_preserves/capture_event_groups.csv' # csv: file_name,group
+bottleneck_file = tmp_dir + base_model.name + '-' + base_model.layers[-1].name + '-bottlenecks.h5'
 
-bottleneck_file = tmp_dir + base_model.name + '-capture-event-groups-bottlenecks.csv'
-
-# create groups
-#create_camera_groups(data_dir, camera_groups_file)
+# create groups files
+create_camera_groups(data_dir, camera_groups_file)
 create_capture_event_groups(data_dir, capture_event_groups_file)
-groups = group_dict(capture_event_groups_file)
 print()
 
-# get bottlenecks and classes
-bottlenecks, classes = create_bottlenecks(bottleneck_file, class_file, data_dir, base_model, groups)
+report.data_summary(data_dir, camera_groups_file, verbose=True)
+
+# get/create bottlenecks 
+groups_files = [camera_groups_file, capture_event_groups_file]
+bottlenecks = create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files)
 
 # perform tests
 cv = True
-#optimizer = 'adam'
+groups = "capture_event_groups"
 optimizer = optimizers.Adam(clipnorm=1.0)
 if not cv:
     train_and_evaluate(
             base_model, bottlenecks, tmp_dir, log_dir, 
-            test_size=0.2, use_groups=True, use_weights=False,
-            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=64,
+            test_size=0.2, groups=groups, use_weights=True,
+            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=512,
             save_model=False)
 else:
     cross_validate(
-            base_model, bottlenecks, classes, 
-            num_folds=5, logo=False, use_weights=False, resample=0.5,
-            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=64,
+            base_model, bottlenecks, groups=groups,
+            num_folds=5, logo=False, use_weights=False, resample=1.0,
+            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=512,
             summarize_model=True, summarize_misclassified_images=False)
 
 K.clear_session() # prevent TensorFlow error message
