@@ -86,19 +86,19 @@ base_model = load_base_model('InceptionV3')
 #base_model = load_base_model('VGG16')
 
 # setup paths
-data_dir = './research/ssu_preserves/training_images'
+data_dir = './research/ssu_preserves/images'
 tmp_dir = './research/ssu_preserves/tmp/'
 log_dir = tmp_dir + 'logs/'
-camera_groups_file = './research/ssu_preserves/camera_groups.csv' # csv: file_name,group
-capture_event_groups_file = './research/ssu_preserves/capture_event_groups.csv' # csv: file_name,group
-bottleneck_file = tmp_dir + base_model.name + '-' + base_model.layers[-1].name + '-bottlenecks.h5'
+camera_groups_file = './research/ssu_preserves/full_camera_groups.csv' # csv: file_name,group
+capture_event_groups_file = './research/ssu_preserves/full_capture_event_groups.csv' # csv: file_name,group
+bottleneck_file = tmp_dir + base_model.name + '-' + base_model.layers[-1].name + '-full-bottlenecks.h5'
 
 # create groups files
 create_camera_groups(data_dir, camera_groups_file)
 create_capture_event_groups(data_dir, capture_event_groups_file)
 print()
 
-report.data_summary(data_dir, camera_groups_file, verbose=True)
+report.data_summary(data_dir, camera_groups_file, csv=tmp_dir+'data_summary.csv')
 
 # get/create bottlenecks 
 groups_files = [camera_groups_file, capture_event_groups_file]
@@ -119,7 +119,7 @@ else:
             base_model, bottlenecks, groups=groups,
             num_folds=5, logo=False, use_weights=False, resample=1.0,
             optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=512,
-            summarize_model=True, summarize_misclassified_images=False)
+            summarize_model=True, summarize_misclassified_images=True)
 
 K.clear_session() # prevent TensorFlow error message
 

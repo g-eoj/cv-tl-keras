@@ -20,79 +20,128 @@ def group_dict(groups_file):
     return groups
 
 
-def data_summary(data_dir, groups_file=None, verbose=False):
-    """Work in progress - prints summary of image data.
-
-    Note:
-    It's possible to use a groups_file that doesn't match the data_dir. 
-    This will mess up some of the counts.
+def data_summary(data_dir, groups_file=None, csv=None):
+    """Summarizes counts for images in data_dir.
 
     Inputs:
         data_dir: path to directory of images (where images are in a 
             subdirectory for each class)
-        groups_file: file path to csv which have rows with the format: 
-            file_name,group
-
+        groups_file (optional): file path to csv which have rows with the 
+            format: file_name,group
+        csv (optional): file path to save csv of counts, if groups_file exists
     """
 
-    groups = group_dict(groups_file)
-    print("Data Summary:", data_dir)
+    print("Data Summary:", data_dir, "\n")
     class_names = [f for f in listdir(data_dir) if not os.path.isfile(os.path.join(data_dir, f))]
     class_names = sorted(class_names)
-    class_width = max([len(x) for x in class_names] + [5])
+    class_width = max([len(x) for x in class_names] + [8])
     grand_total = 0
-    if groups is not None:
-        group_names = Counter(groups.values()).keys()
+    if groups_file is not None:
+        groups = group_dict(groups_file)
+        group_names = sorted(Counter(groups.values()).keys())
         group_width = max([len(x) for x in group_names] + [5])
-        group_classes = dict(zip(group_names, [[] for n in group_names]))
-        print("%{0}s".format(class_width) % "Class", end="   ")
-        print("%{0}s".format(8) % "Group", end="   ")
-        print("%{0}s".format(8) % "Count")
+        groups_discovered = set() # needed since it's possible to use a groups_file 
+                                  # that lists groups not used in the data_dir
+        print('{0:>{1}}'.format("Class", class_width), end="   ")
+        print('{0:>{1}}'.format("Group", group_width), end="")
+        print('{0:>8}'.format("Count"))
         for class_name in class_names:
-            print("-"*(2*(8+3)+class_width)) 
+            print("-"*(class_width+group_width+3+8)) 
             file_names = os.listdir(os.path.join(data_dir, class_name))
             group = []
             for file_name in file_names:
                 group.append(groups[class_name + "/" + file_name])
             group_counts = Counter(group)
-            for i, key in enumerate(sorted(group_counts.keys())):
+            groups_discovered |= set(group)
+            for i, group_name in enumerate(sorted(group_counts.keys())):
                 if i == 0:
-                    print("%{0}s".format(class_width) % class_name, end="   ")
+                    print('{0:>{1}}'.format(class_name, class_width), end="   ")
                 else:
-                    print("%{0}s".format(class_width) % "", end="   ")
-                group_classes[key].append((class_name, group_counts[key]))
-                print("%{0}s".format(8) % key, end="   ")
-                print("%{0}s".format(8) % group_counts[key])
-            print("%{0}s".format(class_width) % "", end="   ")
-            print("%{0}s".format(8) % "Total", end="   ")
-            print("%{0}s".format(8) % len(file_names))
+                    print('{0:>{1}}'.format("", class_width), end="   ")
+                print('{0:>{1}}'.format(group_name, group_width), end="")
+                print('{0:>8}'.format(group_counts[group_name]))
+            print('{0:>{1}}'.format("", class_width), end="   ")
+            print('{0:>{1}}'.format("Total", group_width), end="")
+            print('{0:>8}'.format(len(file_names)))
             grand_total += len(file_names)
-        print("-"*(2*(8+3)+class_width)) 
-        print("Grand total:", grand_total)
+        print("-"*(class_width+group_width+3+8)) 
 
-        if verbose:
-            group_counts = Counter(groups.values())
-            counts = list(group_counts.values())
-            print("\nGroup Summary:", len(group_names), "groups found | median size:", 
-                    round(np.median(counts), 2), "| mad:", round(np.median(np.abs(np.array(counts) - np.median(counts)))), 
-                    "| mean size:", round(np.mean(counts), 2), "| sd:", round(np.std(counts), 2))
-            print("%{0}s".format(group_width) % "Group", end="   ")
-            print("Class Membership\\Counts")
-            print("-"*(1*(23+3)+group_width)) 
-            for group_name in sorted(group_names):
-                print("%{0}s".format(group_width) % group_name, end="   ")
-                print(group_classes[group_name], "Total:", group_counts[group_name])
-    else:
-        print("%{0}s".format(class_width) % "Class", end="   ")
-        print("%{0}s".format(8) % "Count")
+        rows = []
+        class_totals = []
+        group_totals = {}
+        row = "class,"
+        for group_name in group_names:
+            row += group_name + ","
+            group_totals[group_name] = 0
+        row += "total"
+        rows.append(row)
         for class_name in class_names:
-            print("-"*(1*(8+3)+class_width)) 
+            row = class_name + "," 
+            total = 0
+            group = []
             file_names = os.listdir(os.path.join(data_dir, class_name))
-            print("%{0}s".format(class_width) % class_name, end="   ")
-            print("%{0}s".format(8) % len(file_names))
+            for file_name in file_names:
+                group.append(groups[class_name + "/" + file_name])
+            group_counts = Counter(group)
+            for group_name in group_names:
+                if group_name in group_counts.keys(): 
+                    row += str(group_counts[group_name]) + ","
+                    total += group_counts[group_name]
+                    group_totals[group_name] += group_counts[group_name]
+                else:
+                    row += str(0) + ","
+            row += str(total)
+            class_totals.append(total)
+            rows.append(row)
+        row = "total,"
+        for group_name in group_names:
+            row += str(group_totals[group_name]) + ","
+        row += str(grand_total)
+        rows.append(row)
+
+        print(len(class_names), "classes |", 
+              len(groups_discovered), "groups |",
+              grand_total, "images") 
+        counts = list(group_totals.values())
+        print("median class size:", round(np.median(class_totals), 2), 
+              "| mad:", round(np.median(
+                  np.abs(np.array(class_totals) - np.median(class_totals))))) 
+        print("mean class size:", round(np.mean(class_totals), 2), 
+              "| sd:", round(np.std(class_totals), 2))
+        print("median group size:", round(np.median(counts), 2), 
+              "| mad:", round(np.median(
+                  np.abs(np.array(counts) - np.median(counts))))) 
+        print("mean group size:", round(np.mean(counts), 2), 
+              "| sd:", round(np.std(counts), 2))
+        print()
+
+        # csv
+        for row in rows:
+            print(row)
+        if csv is not None:
+            with open(csv, 'w', newline="") as f:
+                for row in rows:
+                    f.write("%s\n" % row)
+            print("csv saved to", csv)
+    else:
+        print('{0:>{1}}'.format("Class", class_width), end="   ")
+        print('{0:>8}'.format("Count"))
+        print("-"*(class_width+3+8)) 
+        class_totals =[]
+        for class_name in class_names:
+            file_names = os.listdir(os.path.join(data_dir, class_name))
+            print('{0:>{1}}'.format(class_name, class_width), end="   ")
+            print('{0:>8}'.format(len(file_names)))
+            class_totals.append(len(file_names))
             grand_total += len(file_names)
-            print("-"*(1*(8+3)+class_width)) 
-        print("Grand total:", grand_total)
+        print("-"*(class_width+3+8)) 
+        print(len(class_names), "classes |", 
+              grand_total, "images") 
+        print("median class size:", round(np.median(class_totals), 2), 
+              "| mad:", round(np.median(
+                  np.abs(np.array(class_totals) - np.median(class_totals))))) 
+        print("mean class size:", round(np.mean(class_totals), 2), 
+              "| sd:", round(np.std(class_totals), 2))
     print()
 
 

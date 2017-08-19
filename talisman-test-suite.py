@@ -69,7 +69,7 @@ bottleneck_file = './research/ssu_ct-scans/tmp/inception_v3-mixed7-bottlenecks-e
 create_groups(data_dir, groups_file)
 print()
 
-report.data_summary(data_dir, groups_file, verbose=True)
+report.data_summary(data_dir, groups_file, csv=tmp_dir+'data_summary.csv')
 
 # get/create bottlenecks 
 groups_files = [groups_file]
