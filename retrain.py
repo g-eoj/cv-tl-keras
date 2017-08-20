@@ -222,7 +222,7 @@ def create_final_layers(base_model, num_classes,
 
 def train_and_evaluate(
         base_model, bottlenecks, tmp_dir, log_dir, 
-        test_size=0.1, groups=None, use_weights=False,
+        test_size=0.1, groups=None, use_weights=False, resample=None,
         optimizer=None, learning_rate=0.001, dropout_rate=0.5, epochs=10, 
         batch_size=32, save_model=False):
     """Use a train-test split to evaluate final layers in transfer learning. 
@@ -242,6 +242,9 @@ def train_and_evaluate(
             'patient_groups.csv' the key should be 'patient_groups'
         use_weights (optional): use class balance to scale the loss function 
             during training
+        resample: float, (if groups is not None) oversamples so that the number 
+            of training samples in each class is equal to 
+            (reasample * largest training class size)
         optimizer (optional): Keras optimizer to use when training final layers
         learning_rate (optional): model hyperparameter
         dropout_rate (optional): model hyperparameter
@@ -269,6 +272,24 @@ def train_and_evaluate(
     else:
         train, validate = next(GroupShuffleSplit(n_splits=2, test_size=test_size).split(
                 features, class_numbers, group_labels))
+        if resample is not None:
+            uniques, counts = np.unique(class_numbers[train], return_counts=True)
+            print("Oversampling to balance classes in training set.")
+            print("Training set sizes will be at least ", 
+                  resample, " times max training set class size of ", max(counts), ".", sep='')
+            class_counts = dict(zip(uniques, counts))
+            max_sample_size = int(max(counts) * resample)
+            random_idxs = []
+            for class_number in class_counts.keys():
+                indexes = np.where(class_number == class_numbers)[0]
+                indexes = np.intersect1d(indexes, train)
+                if class_counts[class_number] < max_sample_size:
+                    sample_size = max_sample_size - class_counts[class_number]
+                    random_idxs = np.concatenate(
+                        (random_idxs, np.random.choice(indexes, sample_size, replace=True)))
+                    print("Class number", class_number, "training set size changed:", 
+                          class_counts[class_number], "->", class_counts[class_number] + sample_size)
+            train = np.concatenate((train, random_idxs)).astype(int)
         train_features, validation_features, train_labels, validation_labels = \
                 features[train], features[validate], \
                 class_numbers[train], class_numbers[validate]
