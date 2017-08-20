@@ -19,7 +19,7 @@ from keras.utils.np_utils import to_categorical
 from report import save_model_summary, print_confusion_matrix, print_model_info, print_class_balance
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, GroupShuffleSplit, GroupKFold, LeaveOneGroupOut
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_recall_fscore_support
 from sklearn.utils import class_weight as cw
 
 
@@ -315,18 +315,27 @@ def train_and_evaluate(
 
     predictions = final_layers.predict(validation_features)
     prediction_labels = np.argmax(predictions, axis=1)
-    f1_scores = f1_score(
-            validation_labels, 
-            prediction_labels,
-            average=None, 
-            labels=range(num_classes))
+    beta = 1.0
+    precision_scores, recall_scores, fbeta_scores, _ = \
+            precision_recall_fscore_support(
+                validation_labels, 
+                prediction_labels,
+                beta=beta,
+                average=None, 
+                labels=range(num_classes))
     print('\nValidation Accuracy:', round(accuracy_score(validation_labels, prediction_labels), 4))
-    print('F1 Scores:', f1_scores)
+    print('Average Precision:', round(np.mean(precision_scores), 4))
+    print('Average Recall:', round(np.mean(recall_scores), 4))
+    print('Average F-beta(', beta, ') Score: ', round(np.mean(fbeta_scores), 4), sep="")
+    print('F-beta(', beta, ') Scores: [', end="  ", sep="")
+    for x in fbeta_scores:
+        print(round(x, 2), end="  ")
+    print("]\n")
     cm = confusion_matrix(
             validation_labels, 
             prediction_labels,
             labels=range(num_classes))
-    print_confusion_matrix(cm, np.unique(class_labels))
+    print_confusion_matrix(cm, np.unique(class_labels), normalize=False)
     print()
 
     # training parameters/config summary
