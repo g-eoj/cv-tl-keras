@@ -89,9 +89,9 @@ base_model = load_base_model('InceptionV3')
 data_dir = './research/ssu_preserves/images'
 tmp_dir = './research/ssu_preserves/tmp/'
 log_dir = tmp_dir + 'logs/'
-camera_groups_file = './research/ssu_preserves/full_camera_groups.csv' # csv: file_name,group
-capture_event_groups_file = './research/ssu_preserves/full_capture_event_groups.csv' # csv: file_name,group
-bottleneck_file = tmp_dir + base_model.name + '-' + base_model.layers[-1].name + '-full-bottlenecks.h5'
+camera_groups_file = './research/ssu_preserves/camera_groups.csv' # csv: file_name,group
+capture_event_groups_file = './research/ssu_preserves/capture_event_groups.csv' # csv: file_name,group
+bottleneck_file = tmp_dir + base_model.name + '-' + base_model.layers[-1].name + '-bottlenecks.h5'
 
 # create groups files
 create_camera_groups(data_dir, camera_groups_file)
@@ -107,19 +107,21 @@ bottlenecks = create_bottlenecks(bottleneck_file, data_dir, base_model, groups_f
 # perform tests
 cv = True
 groups = "capture_event_groups"
-optimizer = optimizers.Adam(clipnorm=1.0)
+combine = {'birds': ('raven', 'miscellaneous birds', 'quail', "stellar's jay", 'crow', 'hawk', 'owl')}
+exclude = ('dog', 'mountainlion', 'vehicle', 'mouse', 'racoon', 'pig', 'unknown', 'multiple')
+optimizer = 'adam'
 if not cv:
     train_and_evaluate(
-            base_model, bottlenecks, tmp_dir, log_dir, 
-            test_size=0.2, groups=groups, use_weights=True,
-            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=512,
+            base_model, bottlenecks, tmp_dir, log_dir, combine=combine, exclude=exclude,
+            test_size=0.2, groups=groups, use_weights=False, resample=1.0,
+            optimizer=optimizer, dropout_rate=0.5, epochs=20, batch_size=32,
             save_model=False)
 else:
     cross_validate(
-            base_model, bottlenecks, groups=groups,
+            base_model, bottlenecks, groups=groups, combine=combine, exclude=exclude,
             num_folds=5, logo=False, use_weights=False, resample=1.0,
-            optimizer=optimizer, dropout_rate=0.8, epochs=20, batch_size=512,
-            summarize_model=True, summarize_misclassified_images=True)
+            optimizer=optimizer, dropout_rate=0.5, epochs=20, batch_size=32,
+            summarize_model=True, summarize_misclassified_images=False)
 
 K.clear_session() # prevent TensorFlow error message
 

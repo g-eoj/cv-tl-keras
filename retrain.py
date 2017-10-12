@@ -180,6 +180,72 @@ def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
     return bottlenecks
 
 
+def combine_classes(combine, bottlenecks):
+    """Given a bottlenecks file, combine multiple classes into a single class.
+    It's possible for multiple new combinations can be created at once.
+
+    Inputs:
+        combine: dictionary, values are existing class names that are to be
+            combined into a new class with the name of their key.
+        bottlenecks: h5py file object returned by 'create_bottlenecks' function
+
+    Returns: tuple of numpy arrays, (class_numbers, class_labels, classes) which
+        are meant to be used instead of the corresponding arrays from the 
+        bottleneck file
+    """
+
+    class_labels = bottlenecks["class_labels"][:].astype(object)
+    classes = bottlenecks["classes"][:].astype(object)
+    # use 'object' dtype (i.e. strings are bytes objects) so string length 
+    # can change in numpy arrays
+    class_indices = {}
+    for i, name in enumerate(classes):
+        class_indices[name] = i
+
+    for new_class_name in combine:
+        print("\nMaking", new_class_name, "class from", combine[new_class_name])
+        # use encode() so all strings are bytes objects
+        combine_labels = sorted([name.encode() for name in combine[new_class_name]])
+        combine_numbers = sorted([class_indices[name] for name in combine_labels])
+
+        for number in combine_numbers:
+            class_labels[class_labels == classes[number]] = new_class_name.encode()   
+
+        # replace class name corresponding to smaller class number in classes
+        classes[combine_numbers[0]] = new_class_name.encode()
+        # delete class names corresponding to larger class numbers from classes
+        classes = np.sort(np.delete(classes, combine_numbers[1:]))
+        # update class indices
+        class_indices = {}
+        for i, name in enumerate(classes):
+            class_indices[name] = i
+
+    print("Updating class numbers...")
+    class_numbers = np.array([class_indices[name] for name in class_labels])
+    print()
+
+    # convert bytes objects back to fixed length strings for compatability and speed
+    return class_numbers, class_labels.astype(str), classes.astype(str) 
+
+
+def exclude_classes(exclude, class_labels):
+    """Returns indexes corresponding to classes that are to be excluded.
+    
+    Inputs:
+        exclude: tuple of strings, class names to be excluded 
+        class_labels: 'class_labels' numpy array from 
+            'bottlenecks' h5py object
+
+    Returns: numpy array of indexes
+    """
+
+    excluded = []
+    for name in exclude:
+        indexes = np.where(class_labels == name)[0]
+        excluded = np.concatenate((excluded, indexes))
+    return excluded.astype(int)
+
+
 def create_final_layers(base_model, num_classes, 
         optimizer=None, learning_rate=0.001, dropout_rate=0.5):
     """Returns a Keras model that is meant to be trained with features 
@@ -214,14 +280,14 @@ def create_final_layers(base_model, num_classes,
         
     # compile the final layers model
     if optimizer is None:
-        optimizer = keras.optimizers.Adam(lr=learning_rate)
+        optimizer = keras.optimizers.Adam(clipnorm=1.0)
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
 
     return model
 
 
 def train_and_evaluate(
-        base_model, bottlenecks, tmp_dir, log_dir, 
+        base_model, bottlenecks, tmp_dir, log_dir, combine=None, exclude=None,
         test_size=0.1, groups=None, use_weights=False, resample=None,
         optimizer=None, learning_rate=0.001, dropout_rate=0.5, epochs=10, 
         batch_size=32, save_model=False):
@@ -236,6 +302,9 @@ def train_and_evaluate(
         bottlenecks: h5py file object returned by 'create_bottlenecks' function
         tmp_dir: path, trained model is saved here when 'save_model' is True
         log_dir: path, tensorboard logs are saved here
+        combine (optional): dictionary, values are existing class names that are to be
+            combined into a new class with the name of their key.
+        exclude (optional): tuple of strings, class names to be ignored 
         test_size (optional): proportion of data to be used for testing
         groups (optional): string, key used to get groups data from 
             'bottlenecks', for example, to use data from the groups file 
@@ -254,14 +323,29 @@ def train_and_evaluate(
             layers are combined and saved as a complete model in 'tmp_dir'
     """
 
-    class_numbers = bottlenecks["class_numbers"][:]
-    class_labels = bottlenecks["class_labels"][:].astype(str)
+    if combine is not None:
+        class_numbers, class_labels, _ = combine_classes(combine, bottlenecks)
+    else:
+        class_numbers = bottlenecks["class_numbers"][:]
+        class_labels = bottlenecks["class_labels"][:].astype(str)
     if groups is not None:
         group_labels = bottlenecks[groups][:].astype(str)
     else:
         group_labels = bottlenecks["blank_groups"][:].astype(str)
     features = bottlenecks["features"][:]
     bottlenecks.close()
+
+    if exclude is not None:
+        print("Removing", exclude, "classes.")
+        excluded = exclude_classes(exclude, class_labels)
+        class_labels = np.delete(class_labels, excluded, 0)
+        group_labels = np.delete(group_labels, excluded, 0)
+        features = np.delete(features, excluded, 0)
+        classes = sorted(np.unique(class_labels))
+        class_indices = {}
+        for i, name in enumerate(classes):
+            class_indices[name] = i
+        class_numbers = np.array([class_indices[name] for name in class_labels])
 
     num_classes = len(np.unique(class_numbers))
     
@@ -412,8 +496,8 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
 
 
 def cross_validate(
-        base_model, bottlenecks, groups=None, num_folds=5, 
-        logo=False, use_weights=False, resample=None, optimizer=None, 
+        base_model, bottlenecks, groups=None, combine=None, exclude=None, 
+        num_folds=5, logo=False, use_weights=False, resample=None, optimizer=None, 
         learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
         summarize_model=True, summarize_misclassified_images=False):
     """Use cross validation to evaluate final layers in transfer learning. 
@@ -428,6 +512,9 @@ def cross_validate(
         groups (optional): string, key used to get groups data from 
             'bottlenecks', for example, to use data from the groups file 
             'patient_groups.csv' the key should be 'patient_groups'
+        combine (optional): dictionary, values are existing class names that are to be
+            combined into a new class with the name of their key.
+        exclude (optional): tuple of strings, class names to be ignored 
         num_folds (optional): number of folds to use
         logo (optional): do leave one group out cross validation
         use_weights (optional): use class balance to scale the loss function 
@@ -444,16 +531,32 @@ def cross_validate(
             misclassified images
     """
 
-    classes = bottlenecks["classes"][:].astype(str)
+    if combine is not None:
+        class_numbers, class_labels, classes = combine_classes(combine, bottlenecks)
+    else:
+        class_numbers = bottlenecks["class_numbers"][:]
+        class_labels = bottlenecks["class_labels"][:].astype(str)
+        classes = bottlenecks["classes"][:].astype(str)
+
     file_names = bottlenecks["file_names"][:].astype(str)
-    class_numbers = bottlenecks["class_numbers"][:]
-    class_labels = bottlenecks["class_labels"][:].astype(str)
     if groups is not None:
         group_labels = bottlenecks[groups][:].astype(str)
     else:
         group_labels = bottlenecks["blank_groups"][:].astype(str)
     features = bottlenecks["features"][:]
     bottlenecks.close()
+
+    if exclude is not None:
+        print("Removing", exclude, "classes.")
+        excluded = exclude_classes(exclude, class_labels)
+        class_labels = np.delete(class_labels, excluded, 0)
+        group_labels = np.delete(group_labels, excluded, 0)
+        features = np.delete(features, excluded, 0)
+        classes = sorted(np.unique(class_labels))
+        class_indices = {}
+        for i, name in enumerate(classes):
+            class_indices[name] = i
+        class_numbers = np.array([class_indices[name] for name in class_labels])
 
     actual_classes = []
     predicted_classes =[]
