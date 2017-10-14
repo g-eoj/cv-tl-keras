@@ -148,8 +148,9 @@ def data_summary(data_dir, groups_file=None, csv=None):
 def print_class_balance(class_labels, class_numbers, 
                         fold_labels, fold_names):
     class_label_names = sorted(set(class_labels))
+    first_column_width = max([len(x) for x in fold_names] + [5])  # 5 is value length
     columnwidth = max([len(x) for x in class_label_names] + [5])  # 5 is value length
-    empty_cell = " " * columnwidth
+    empty_cell = " " * first_column_width
 
     # Print header
     print("    " + empty_cell + "--- Class Balance ---".center(
@@ -161,7 +162,7 @@ def print_class_balance(class_labels, class_numbers,
 
     # Print rows
     for i, fold_name in enumerate(fold_names): 
-        print("    %{0}s".format(columnwidth) % fold_name, end=" ")
+        print("    %{0}s".format(first_column_width) % fold_name, end=" ")
         counts = Counter(fold_labels[i])
         for j in range(len(class_label_names)):
             if j not in fold_labels[i]:
@@ -172,7 +173,7 @@ def print_class_balance(class_labels, class_numbers,
             print(cell, end=" ")
         print()
 
-    print("    %{0}s".format(columnwidth) % "Total", end=" ")
+    print("    %{0}s".format(first_column_width) % "Total", end=" ")
     counts = Counter(class_numbers)
     for i in range(len(class_label_names)):
         proportion = counts[i] #/ float(len(class_numbers))
