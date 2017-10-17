@@ -345,6 +345,7 @@ def train_and_evaluate(
         class_indices = {}
         for i, name in enumerate(classes):
             class_indices[name] = i
+        print("Updating class numbers...")
         class_numbers = np.array([class_indices[name] for name in class_labels])
 
     num_classes = len(np.unique(class_numbers))
@@ -550,12 +551,14 @@ def cross_validate(
         print("Removing", exclude, "classes.")
         excluded = exclude_classes(exclude, class_labels)
         class_labels = np.delete(class_labels, excluded, 0)
+        file_names = np.delete(file_names, excluded, 0)
         group_labels = np.delete(group_labels, excluded, 0)
         features = np.delete(features, excluded, 0)
         classes = sorted(np.unique(class_labels))
         class_indices = {}
         for i, name in enumerate(classes):
             class_indices[name] = i
+        print("Updating class numbers...")
         class_numbers = np.array([class_indices[name] for name in class_labels])
 
     actual_classes = []
