@@ -222,7 +222,6 @@ def combine_classes(combine, bottlenecks):
 
     print("Updating class numbers...")
     class_numbers = np.array([class_indices[name] for name in class_labels])
-    print()
 
     # convert bytes objects back to fixed length strings for compatability and speed
     return class_numbers, class_labels.astype(str), classes.astype(str) 
@@ -242,6 +241,24 @@ def exclude_classes(exclude, class_labels):
     excluded = []
     for name in exclude:
         indexes = np.where(class_labels == name)[0]
+        excluded = np.concatenate((excluded, indexes))
+    return excluded.astype(int)
+
+
+def exclude_groups(exclude, group_labels):
+    """Returns indexes corresponding to classes that are to be excluded.
+    
+    Inputs:
+        exclude: tuple of strings, class names to be excluded 
+        group_labels: 'group_labels' numpy array from 
+            'bottlenecks' h5py object
+
+    Returns: numpy array of indexes
+    """
+
+    excluded = []
+    for name in exclude:
+        indexes = np.where(group_labels == name)[0]
         excluded = np.concatenate((excluded, indexes))
     return excluded.astype(int)
 
@@ -496,8 +513,24 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
     return folds    
 
 
+import sys
+
+class Logger(object):
+    def __init__(self, path):
+        self.terminal = sys.stdout
+        self.log = open(path + 'log.txt', 'w')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        pass
+
+
 def cross_validate(
-        base_model, bottlenecks, groups=None, combine=None, exclude=None, 
+        base_model, bottlenecks, tmp_dir, data_dir,
+        groups=None, combine=None, exclude=None, 
         num_folds=5, logo=False, use_weights=False, resample=None, optimizer=None, 
         learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
         summarize_model=True, summarize_misclassified_images=False):
@@ -510,12 +543,15 @@ def cross_validate(
         base_model: Keras model used to generate features, it's assumed the 
             model's output is a vector
         bottlenecks: h5py file object returned by 'create_bottlenecks' function
+        tmp_dir: path, 'results' directory of results saved here
+        data_dir: path to directory of images used to calculate features 
+            (where images are in a subdirectory for each class)
         groups (optional): string, key used to get groups data from 
             'bottlenecks', for example, to use data from the groups file 
             'patient_groups.csv' the key should be 'patient_groups'
         combine (optional): dictionary, values are existing class names that are to be
             combined into a new class with the name of their key.
-        exclude (optional): tuple of strings, class names to be ignored 
+        exclude (optional): tuple of strings, class names to be ignored
         num_folds (optional): number of folds to use
         logo (optional): do leave one group out cross validation
         use_weights (optional): use class balance to scale the loss function 
@@ -528,8 +564,9 @@ def cross_validate(
         epochs (optional): training parameter
         batch_size (optional): training parameter
         summarize_model (optional): prints hyperparamter and model summary
-        summarize_misclassified_images (optional): prints list of 
-            misclassified images
+        summarize_misclassified_images (optional): saves list of misclassified 
+            image file names and random sample of misclassified images as a 
+            jpg in the 'results' folder
     """
 
     if combine is not None:
@@ -542,10 +579,23 @@ def cross_validate(
     file_names = bottlenecks["file_names"][:].astype(str)
     if groups is not None:
         group_labels = bottlenecks[groups][:].astype(str)
+        ## temp hack to run tests on a single group
+        #camera_groups_labels = bottlenecks["camera_groups"][:].astype(str)
     else:
         group_labels = bottlenecks["blank_groups"][:].astype(str)
     features = bottlenecks["features"][:]
     bottlenecks.close()
+
+    ## temp hack to run tests on a single group
+    #exclude_cameras = ('UpperMostROWCamera', 'NorthernTowerMeadowCamera', 
+    #    'UpperROWWoodChipFieldCamera', 'UpperTrailCamera', 'SODPlotCamera')
+    #print("Removing", exclude_cameras, "groups.")
+    #excluded = exclude_groups(exclude_cameras, camera_groups_labels)
+    #class_labels = np.delete(class_labels, excluded, 0)
+    #file_names = np.delete(file_names, excluded, 0)
+    #group_labels = np.delete(group_labels, excluded, 0)
+    #features = np.delete(features, excluded, 0)
+    #class_numbers = np.delete(class_numbers, excluded, 0)
 
     if exclude is not None:
         print("Removing", exclude, "classes.")
@@ -582,6 +632,17 @@ def cross_validate(
         print('\nPerforming leave one group out cross validation...', sep='')
         num_groups = len(set(group_labels))
         cv = LeaveOneGroupOut()
+
+
+    # ROC only works for binary classification
+    #from scipy import interp
+    import matplotlib
+    matplotlib.use('Agg') 
+    import matplotlib.pyplot as plt
+    #from sklearn.metrics import roc_curve, auc
+    #tprs = []
+    #aucs = []
+    #mean_fpr = np.linspace(0, 1, 100)
 
     # cv.split will ignore group_labels if cv is StratifiedKFold
     for i, split in enumerate(cv.split(features, class_numbers, group_labels)):
@@ -623,12 +684,12 @@ def cross_validate(
         actual_classes.extend(class_numbers[test])
         group_labels_test.extend(group_labels[test])
         file_names_test.extend(file_names[test])
-        print("First 10 test files:", sorted(file_names[test])[0:10])
+        #print("First 10 test files:", sorted(file_names[test])[0:10])
         splits.append(class_numbers[test])
         if not logo:
             split_names.append("Fold " + str(i+1))
         else:
-            split_names.append("Group '" + split_name + "'")
+            split_names.append("Group " + split_name)
 
         class_weight = None # reset class weights
         if use_weights:
@@ -650,6 +711,16 @@ def cross_validate(
                   verbose=2)
 
         predictions = model.predict(features[test])
+
+        # save csv with all scores for data analysis
+        csv = np.hstack((file_names[test].reshape((-1,1)),
+                      class_labels[test].reshape((-2,1)),
+                      group_labels[test].reshape((-1,1)),
+                      predictions))
+        header = 'file_name,actual_class,group_name,score ' + ',score '.join(classes)
+        np.savetxt(tmp_dir + 'results/' + split_names[-1] + '.csv', csv, 
+                delimiter=',', header=header, comments='', fmt='%s')
+
         predicted_classes_this_split = np.argmax(predictions, axis=1)
         predicted_classes.extend(predicted_classes_this_split)
         prediction_scores.extend(np.amax(predictions, axis=1))
@@ -668,6 +739,16 @@ def cross_validate(
         split_metrics[split_name] = [accuracy_scores[-1], f1_scores, cm]
         print_confusion_matrix(cm, classes, normalize=False)
         print()
+
+        # ROC curves, only works for two classes atm
+        #fpr, tpr, thresholds = roc_curve(class_numbers[test], predictions[:,1].reshape(-1))
+        #tprs.append(interp(mean_fpr, fpr, tpr))
+        #tprs[-1][0] = 0.0
+        #roc_auc = auc(fpr, tpr)
+        #aucs.append(roc_auc)
+        #plt.plot(fpr, tpr, lw=1, alpha=0.3,
+        #        #label='ROC fold %d (AUC = %0.2f)' % (i+1, roc_auc))
+        #        label='%s (AUC = %0.2f)' % (split_names[-1], roc_auc))
         #if i == 5: break
 
     if not logo:
@@ -681,7 +762,7 @@ def cross_validate(
         print("Accuracy by fold:", accuracy_scores)
     else:
         print("Accuracy by group:", accuracy_scores)
-    print()
+    #print()
 
     # f-score
     #cms = [] # can probably remove
@@ -708,31 +789,64 @@ def cross_validate(
     #print_confusion_matrix(cm, classes)
     #print()
 
+    #ROC only works for 2 classes atm
+    #plt.plot([0,1], [0,1], linestyle='--', lw=2, color='r',
+    #        label='Luck', alpha=.8)
+
+    #mean_tpr = np.mean(tprs, axis=0)
+    #mean_tpr[-1] = 1.0
+    #mean_auc = auc(mean_fpr, mean_tpr)
+    #std_auc = np.std(aucs)
+    #plt.plot(mean_fpr, mean_tpr, color='b',
+    #         label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+    #         lw=2, alpha=.8)
+
+    #std_tpr = np.std(tprs, axis=0)
+    #tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+    #tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+    #plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+    #    	     label=r'$\pm$ 1 std. dev.')
+
+    #plt.xlim([-0.05, 1.05])
+    #plt.ylim([-0.05, 1.05])
+    #plt.xlabel('False Positive Rate')
+    #plt.ylabel('True Positive Rate')
+    #if logo:
+    #    plt.title('ROC Leave One Group Out')
+    #else:
+    #    plt.title('ROC ' + str(num_folds) + 'Fold Cross Validation')
+    ##plt.legend(loc="lower right")
+    #plt.legend(loc="best")
+    ##plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    #plt.savefig(tmp_dir + '/results/ROC.jpg')
+
     # data summary by split
     print_class_balance(class_labels, class_numbers,
                         splits, split_names)
 
     # summarize problem groups 
-    if logo:
-        print("--- Problem Groups (accuracy < 0.7) Summary ---")
-        count = 0
-        for key in sorted(split_metrics.keys()):
-            if split_metrics[key][0] < 0.7:
-                print("Groups Name:", key, "| Accuracy:", round(split_metrics[key][0], 4))
-                print_confusion_matrix(split_metrics[key][2], classes, normalize=False)
-                count += 1
-                print()
-        print(count, "problem groups.\n")
-    else:
-        print("--- Problem Groups (accuracy < 0.7) Summary ---")
-        count = 0
-        for group in np.unique(group_labels):
-            indexes = np.where(group_labels == group)[0]
-            score = accuracy_score(np.asarray(actual_classes)[indexes], np.asarray(predicted_classes)[indexes])
-            if score < 0.7:
-                print(group, " | count: ", len(indexes), " | accuracy: ", round(score, 4), sep="")
-                count += 1
-        print(count, "problem groups.\n")
+    summarize_problem_goups = False
+    if summarize_problem_goups:
+        if logo:
+            print("--- Problem Groups (accuracy < 0.7) Summary ---")
+            count = 0
+            for key in sorted(split_metrics.keys()):
+                if split_metrics[key][0] < 0.7:
+                    print("Groups Name:", key, "| Accuracy:", round(split_metrics[key][0], 4))
+                    print_confusion_matrix(split_metrics[key][2], classes, normalize=False)
+                    count += 1
+                    print()
+            print(count, "problem groups.\n")
+        else:
+            print("--- Problem Groups (accuracy < 0.7) Summary ---")
+            count = 0
+            for group in np.unique(group_labels):
+                indexes = np.where(group_labels == group)[0]
+                score = accuracy_score(np.asarray(actual_classes)[indexes], np.asarray(predicted_classes)[indexes])
+                if score < 0.7:
+                    print(group, " | count: ", len(indexes), " | accuracy: ", round(score, 4), sep="")
+                    count += 1
+            print(count, "problem groups.\n")
 
     # training parameters/config summary
     if summarize_model:
@@ -740,11 +854,75 @@ def cross_validate(
         print()
 
     # misclassified files
-    if summarize_misclassified_images:
+    if summarize_misclassified_images is not None:
+        import matplotlib.image as mpimg
         print('--- Misclassified Files ---')
-        print('file_name predicted_class score')
+
+        fig, axes = plt.subplots(25, 1)
+        fig.set_size_inches(5, 75)
+
+        #print('file_name predicted_class score')
         misclassified = np.argwhere(np.asarray(actual_classes) != np.asarray(predicted_classes))
-        for m in misclassified:
-            print(file_names_test[m[0]], classes[predicted_classes[m[0]]], prediction_scores[m[0]]) 
-        print()
+        misclassified_indexes = np.random.choice(misclassified.reshape(-1), 25, replace=False)
+        for i, axis in enumerate(axes.flat):
+            #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
+            m = misclassified_indexes[i]
+            image_path = data_dir + '/' + file_names_test[m]
+            image = mpimg.imread(image_path)
+            axis.imshow(image)
+            xlabel = "File: %s\nTrue: %s\nPred: %s (%.3f)" % (
+                    file_names_test[m], 
+                    classes[actual_classes[m]],
+                    classes[predicted_classes[m]], 
+                    prediction_scores[m])
+            axis.set_xlabel(xlabel)
+
+            # Remove ticks from the plot.
+            axis.set_xticks([])
+            axis.set_yticks([])
+            # Remove borders of subplots.
+            axis.spines["top"].set_visible(False)
+            axis.spines["right"].set_visible(False)
+            axis.spines["bottom"].set_visible(False)
+            axis.spines["left"].set_visible(False)
+        
+        plt.tight_layout()
+        plt.savefig(tmp_dir + 'results/misclassified_images.jpg', format='jpg', dpi=300)
+        print("random sample of 25 misclassified images saved to", tmp_dir + 'results/misclassified_images.jpg')
+
+        classified = np.argwhere(np.asarray(actual_classes) == np.asarray(predicted_classes))
+        classified_indexes = np.random.choice(classified.reshape(-1), 25, replace=False)
+        for i, axis in enumerate(axes.flat):
+            #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
+            m = classified_indexes[i]
+            image_path = data_dir + '/' + file_names_test[m]
+            image = mpimg.imread(image_path)
+            axis.imshow(image)
+            xlabel = "File: %s\nTrue: %s\nPred: %s (%.3f)" % (
+                    file_names_test[m], 
+                    classes[actual_classes[m]],
+                    classes[predicted_classes[m]], 
+                    prediction_scores[m])
+            axis.set_xlabel(xlabel)
+
+            # Remove ticks from the plot.
+            axis.set_xticks([])
+            axis.set_yticks([])
+            # Remove borders of subplots.
+            axis.spines["top"].set_visible(False)
+            axis.spines["right"].set_visible(False)
+            axis.spines["bottom"].set_visible(False)
+            axis.spines["left"].set_visible(False)
+        
+        plt.tight_layout()
+        plt.savefig(tmp_dir + 'results/classified_images.jpg', format='jpg', dpi=300)
+        print("random sample of 25 correctly classified images saved to", tmp_dir + 'results/classified_images.jpg')
+        
+        csv = tmp_dir + 'results/misclassified_images.csv'
+        with open(csv, 'w', newline="") as f:
+            f.write('file_name,predicted_class,score\n')
+            for m in misclassified.reshape(-1):
+                row = file_names_test[m] + ',' + classes[predicted_classes[m]] + ',' + str(prediction_scores[m])
+                f.write("%s\n" % row)
+        print("csv of all misclassified images saved to", csv)
 
