@@ -131,19 +131,35 @@ bottlenecks = create_bottlenecks(bottleneck_file, data_dir, base_model, groups_f
 
 # perform tests
 cv = True
-groups = "camera_groups"
-#groups = "capture_event_groups"
-#combine = {'something': ('deer', 'squirrel', 'human', 'rabbit', #'unknown', 
-#        'turkey', 'skunk', 'bobcat', 'possum', 'coyote', 'fox', 'dog', 'raven', 
-#        'miscellaneous birds', 'quail', 'multiple', 'mountainlion', 'vehicle', 
-#        'mouse', 'raccoon', "stellar's jay", 'crow', 'hawk', 'owl', 'pig')}
-#exclude = [('unknown',), None] 
-#combine = {'birds': ('raven', 'miscellaneous birds', 'quail', "stellar's jay", 'crow', 'hawk', 'owl')}
-#exclude = ('dog', 'mountainlion', 'vehicle', 'mouse', 'raccoon', 'pig', 
-#    'unknown', 'multiple', 'fox', 'coyote', 'possum', 'birds', 'turkey')
-combine = {'mixed': ('raven', 'miscellaneous birds', 'quail', "stellar's jay", 'crow', 'hawk', 'owl', 
-    'dog', 'mountainlion', 'vehicle', 'mouse', 'raccoon', 'pig', 'multiple', 'fox', 'coyote', 'possum')}
+#groups = "camera_groups"
+groups = "capture_event_groups"
+
+# Binary
+combine = {'something': ('deer', 'squirrel', 'human', 'rabbit', #'unknown', 
+        'turkey', 'skunk', 'bobcat', 'possum', 'coyote', 'fox', 'dog', 'raven', 
+        'miscellaneous birds', 'quail', 'multiple', 'mountainlion', 'vehicle', 
+        'mouse', 'raccoon', "stellar's jay", 'crow', 'hawk', 'owl', 'pig')}
 exclude = ('unknown',)
+
+# Binary with exclusion
+#combine = {'something': ('deer', 'squirrel', 'human', 'rabbit', #'unknown', 
+#        'turkey', 'skunk', 'bobcat', 'possum', 'coyote')} 
+#exclude = ('unknown',
+#        'fox', 'dog', 'raven', 
+#        'miscellaneous birds', 'quail', 'multiple', 'mountainlion', 'vehicle', 
+#        'mouse', 'raccoon', "stellar's jay", 'crow', 'hawk', 'owl', 'pig')
+
+# Mixed
+#combine = {'mixed': ('raven', 'miscellaneous birds', 'quail', "stellar's jay", 'crow', 'hawk', 'owl', 
+#    'dog', 'multiple', 'mountainlion', 'vehicle', 'mouse', 'raccoon', 'pig', # < 75 
+#    'fox', # < 100
+#    'coyote', 'possum', 'bobcat', 'skunk')} # < 600 
+#exclude = ('unknown',)
+
+# Exclusion
+#combine = {'birds': ('raven', 'miscellaneous birds', 'quail', "stellar's jay", 'crow', 'hawk', 'owl')}
+#exclude = ('dog', 'multiple', 'mountainlion', 'vehicle', 'mouse', 'raccoon', 'pig', # < 75 
+#    'unknown')
 
 optimizer = None
 if not cv:
@@ -156,8 +172,8 @@ else:
     cross_validate(
             base_model, bottlenecks, tmp_dir, data_dir,
             groups=groups, combine=combine, exclude=exclude,
-            num_folds=5, logo=True, use_weights=False, resample=1.0,
-            optimizer=optimizer, dropout_rate=0.7, epochs=20, batch_size=512,
+            num_folds=5, logo=False, use_weights=False, resample=1.0,
+            optimizer=optimizer, dropout_rate=0.5, epochs=3, batch_size=64,
             summarize_model=True, summarize_misclassified_images=True)
 
 K.clear_session() # prevent TensorFlow error message

@@ -772,9 +772,12 @@ def cross_validate(
         f1s.append(split_metrics[key][1])
     f1s = np.vstack(f1s)
     f1_avgs = np.apply_along_axis(lambda v: np.mean(v[np.nonzero(v)]), 0, f1s)
+    f1_stds = np.apply_along_axis(lambda v: np.std(v[np.nonzero(v)]), 0, f1s)
     f1_avgs[np.isnan(f1_avgs)] = 0.
+    f1_stds[np.isnan(f1_stds)] = 0.
     print("Average F1 Score overall: %.4f | Standard Deviation: %.4f" % (np.mean(f1_avgs), np.std(f1_avgs)))
     print("Average F1 Score by class:", f1_avgs)
+    print("STD Avg F1 Score by class:", f1_stds)
     print()
 
     # confusion matrix

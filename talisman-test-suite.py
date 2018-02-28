@@ -1,7 +1,8 @@
 from keras import backend as K
 from keras import optimizers
 from retrain import create_bottlenecks, cross_validate, \
-        load_base_model, train_and_evaluate, group_dict
+        load_base_model, train_and_evaluate, group_dict, \
+        Logger
 import report
 
 from keras.models import Model, Sequential
@@ -36,6 +37,25 @@ def create_groups(data_dir, groups_file):
     else:
         print("Patient groups already exist.")
 
+# setup paths
+#data_dir = './research/ssu_ct-scans/paper-rescale-full'
+#data_dir = './research/ssu_ct-scans/paper-rescale'
+#data_dir = './research/ssu_ct-scans/gs_bicubic_-1400to240'
+#data_dir = './research/ssu_ct-scans/gs_-1400to240'
+#data_dir = './research/ssu_ct-scans/even-split_-1400to200'
+#data_dir = './research/ssu_ct-scans/even-split_-1000to200_fixed2'
+data_dir = './research/ssu_ct-scans/gs_-1000to200'
+tmp_dir = './research/ssu_ct-scans/tmp/'
+log_dir = tmp_dir + 'logs/'
+groups_file = './research/ssu_ct-scans/patient-groups.csv' # csv -> file_name,group
+
+# setup logging / flush previous results
+import shutil
+import sys
+if os.path.exists(tmp_dir + 'results'):
+    shutil.rmtree(tmp_dir + 'results')
+os.makedirs(tmp_dir + 'results')
+sys.stdout = Logger(tmp_dir + 'results/')
 
 # load base model
 #input_shape = (160, 160, 3)
@@ -52,18 +72,9 @@ x = GlobalAveragePooling2D()(x)
 base_model = Model(inputs=base_model.input, outputs=x, name='inception_v3')
 #base_model.summary()
 
-# setup paths
-#data_dir = './research/ssu_ct-scans/paper-rescale-full'
-#data_dir = './research/ssu_ct-scans/paper-rescale'
-#data_dir = './research/ssu_ct-scans/gs_bicubic_-1400to240'
-#data_dir = './research/ssu_ct-scans/gs_-1400to240'
-#data_dir = './research/ssu_ct-scans/even-split_-1400to200'
-data_dir = './research/ssu_ct-scans/even-split_-1000to200'
-tmp_dir = './research/ssu_ct-scans/tmp/'
-log_dir = tmp_dir + 'logs/'
-groups_file = './research/ssu_ct-scans/patient-groups.csv' # csv -> file_name,group
-#bottleneck_file = tmp_dir + base_model.name + '-mixed7-bottlenecks-gs_-1400to240.csv'
-bottleneck_file = './research/ssu_ct-scans/tmp/inception_v3-mixed7-bottlenecks-even-split_-1000to200.h5'
+# setup bottleneck path
+#bottleneck_file = './research/ssu_ct-scans/tmp/inception_v3-bottlenecks-even-split_-1000to200.h5'
+bottleneck_file = tmp_dir + base_model.name + '-mixed7-bottlenecks-gs_-1000to200.h5'
 
 # create groups files
 create_groups(data_dir, groups_file)
@@ -78,19 +89,18 @@ bottlenecks = create_bottlenecks(bottleneck_file, data_dir, base_model, groups_f
 # perform tests
 cv = True
 groups = "patient-groups"
-optimizer = optimizers.Adam(clipnorm=1.0)
 if not cv:
     train_and_evaluate(
             base_model, bottlenecks, tmp_dir, log_dir, 
             test_size=0.3, groups=groups, use_weights=True,
-            optimizer=optimizer, dropout_rate=0.5, epochs=20, batch_size=512,
+            optimizer=None, dropout_rate=0.5, epochs=20, batch_size=512,
             save_model=False)
 else:
     cross_validate(
-            base_model, bottlenecks, groups=groups, 
-            num_folds=5, logo=False, use_weights=False, resample=1.0,
-            optimizer=optimizer, dropout_rate=0.5, epochs=20, batch_size=512,
-            summarize_model=True, summarize_misclassified_images=False)
+            base_model, bottlenecks, tmp_dir, data_dir, groups=groups, 
+            num_folds=5, logo=True, use_weights=False, resample=1.0,
+            optimizer=None, dropout_rate=0.5, epochs=20, batch_size=512,
+            summarize_model=True, summarize_misclassified_images=True)
 
 K.clear_session() # prevent TensorFlow error message
 
