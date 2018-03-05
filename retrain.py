@@ -65,29 +65,6 @@ def group_dict(groups_file):
     return groups
 
 
-def preprocess_input_wrapper(x):
-    """Wrapper around keras.applications.imagenet_utils.preprocess_input()
-    to make it compatible for use with keras.preprocessing.image.ImageDataGenerator's
-    `preprocessing_function` argument.
-
-    Parameters
-    ----------
-    x : a numpy 3darray (a single image to be preprocessed)
-
-    Note we cannot pass keras.applications.imagenet_utils.preprocess_input()
-    directly to to keras.preprocessing.image.ImageDataGenerator's
-    `preprocessing_function` argument because the former expects a
-    4D tensor whereas the latter expects a 3D tensor. Hence the
-    existence of this wrapper.
-
-    Returns a numpy 3darray (the preprocessed image).
-    """
-
-    X = np.expand_dims(x, axis=0)
-    X = imagenet_utils_preprocess_input(X)
-    return X[0]
-
-
 def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
     """Saves features and related data to 'bottleneck_file'.
 
@@ -126,7 +103,7 @@ def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
         if base_model.name in ('inception_v3'):
             preprocess_input = inception_v3_preprocess_input
         elif base_model.name in ('vgg16', 'vgg19', 'resnet50'):
-            preprocess_input = preprocess_input_wrapper
+            preprocess_input = imagenet_utils_preprocess_input
         else:
             print(base_model.name, "preprocessing function not found. Exiting.")
             return
