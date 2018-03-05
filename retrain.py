@@ -89,24 +89,14 @@ def preprocess_input_wrapper(x):
 
 
 def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
-    """Returns numpy array of bottlenecks.
+    """Saves features and related data to 'bottleneck_file'.
 
-    Uses h5py to load and return a 'bottleneck_file' which uses the HDF5 data 
-    format. If 'bottleneck_file' does not exist, features are generated 
-    using a Keras 'base_model', and a new 'bottleneck_file' is saved.
-    
-    Inputs:
-        bottleneck_file: path to h5 file
-        data_dir: path to directory of images used to calculate features 
-            (where images are in a subdirectory for each class)
-        base_model: Keras model used to generate features
-        groups (optional): list of file paths to csvs which 
-            have rows with the format: file_name,group
-
-    Returns: h5py file object 
-        h5py file objects work like a dictionary. For example 
-            bottlenecks['features'][:] 
-        returns a numpy array of the features. The keys available are:
+    Generates features for the images in 'data_dir' with 'base_model' and saves
+    the features along with related data to 'bottleneck_file' using the HDF5 
+    data format. 'bottleneck_file' can be loaded as an h5py file object which 
+    works like a dictionary. For example if 'bottleneck_file' is loaded into 
+    the variable bottlenecks, then bottlenecks['features'][:] returns a numpy 
+    array of the features. The keys available are:
         'base_model' -> base_model.name
         'features_layer' -> base_model.layers[-1].name
         'file_names' -> np.array(file_names, dtype='S')
@@ -115,13 +105,22 @@ def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
         'classes' -> np.array(classes, dtype='S')
         'features' -> features (numpy array)
         'blank_groups' -> numpy array, used for sklearn's cross validation
-        plus each group type gets a key, for example the groups file
+        Each group type also gets a key, for example the groups file
             patient_groups.csv
         will cause creation of the key
             'patient_groups'
+
+    Inputs:
+        bottleneck_file: path to h5 file to be created
+        data_dir: path to directory of images used to calculate features 
+            (where images are in a subdirectory for each class)
+        base_model: Keras model used to generate features
+        groups (optional): list of file paths to csvs which 
+            have rows with the format: file_name,group
+
     """
 
-    print('Generating bottlenecks...')
+    print("Generating bottleneck file... ")
     if not os.path.exists(bottleneck_file):
         # Use correct image preprocessing for model
         if base_model.name in ('inception_v3'):
@@ -170,14 +169,22 @@ def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
             bottlenecks.create_dataset(groups_type, data=np.array(group_labels, dtype='S'))
 
         bottlenecks.close()
+        print(bottleneck_file, "created.\n")
     else:
-        print("Bottlenecks already exist.")
-        
-    print("Loading bottlenecks...")
-    bottlenecks = h5py.File(bottleneck_file, 'r')
-    print(bottleneck_file, "loaded.")
+        print(bottleneck_file, "already exists.\n")
 
-    return bottlenecks
+
+def load_bottlenecks(bottleneck_file):
+    """Loads 'bottleneck_file' into an h5py file object and returns it.
+
+    Inputs:
+        bottleneck_file: path to h5 file 
+
+    Returns: h5py file object
+    """
+
+    print("Loading ", bottleneck_file, "...\n", sep='')
+    return h5py.File(bottleneck_file, 'r')
 
 
 def combine_classes(combine, bottlenecks):
@@ -514,7 +521,7 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
 
 
 def cross_validate(
-        base_model, bottlenecks, tmp_dir, data_dir,
+        base_model, bottleneck_file, tmp_dir, data_dir,
         groups=None, combine=None, exclude=None, 
         num_folds=5, logo=False, use_weights=False, resample=None, optimizer=None, 
         learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
@@ -527,7 +534,7 @@ def cross_validate(
     Inputs:
         base_model: Keras model used to generate features, it's assumed the 
             model's output is a vector
-        bottlenecks: h5py file object returned by 'create_bottlenecks' function
+        bottleneck_file: path to h5 file created by 'create_bottlenecks' function
         tmp_dir: path, 'results' directory of results saved here
         data_dir: path to directory of images used to calculate features 
             (where images are in a subdirectory for each class)
@@ -553,6 +560,8 @@ def cross_validate(
             image file names and random sample of misclassified images as a 
             jpg in the 'results' folder
     """
+
+    bottlenecks = load_bottlenecks(bottleneck_file)
 
     if combine is not None:
         class_numbers, class_labels, classes = combine_classes(combine, bottlenecks)
