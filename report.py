@@ -6,6 +6,24 @@ import numpy as np
 from collections import Counter
 
 
+class Logger(object):
+    """Saves terminal output to log file."""
+
+    def __init__(self, path):
+        self.terminal = sys.stdout
+        self.log = open(path + 'log.txt', 'w')
+
+    def isatty(self):
+        return self.terminal.isatty()
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message.replace('\b', '').replace('\r', '\n'))
+
+    def flush(self):
+        pass
+
+
 def group_dict(groups_file):
     """Returns dictionary of group membership, where the keys are file names.
 

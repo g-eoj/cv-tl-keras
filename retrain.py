@@ -513,21 +513,6 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
     return folds    
 
 
-import sys
-
-class Logger(object):
-    def __init__(self, path):
-        self.terminal = sys.stdout
-        self.log = open(path + 'log.txt', 'w')
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-
-    def flush(self):
-        pass
-
-
 def cross_validate(
         base_model, bottlenecks, tmp_dir, data_dir,
         groups=None, combine=None, exclude=None, 
