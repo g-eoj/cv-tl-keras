@@ -12,7 +12,7 @@ from keras.applications.vgg16 import VGG16
 from keras.applications.imagenet_utils import preprocess_input as imagenet_utils_preprocess_input
 from keras.applications.inception_v3 import preprocess_input as inception_v3_preprocess_input
 from keras.layers import Dropout, Flatten, Dense, GlobalAveragePooling2D, Input
-from keras.models import Model, Sequential
+from keras.models import Model, Sequential, model_from_config
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.np_utils import to_categorical
 
@@ -498,19 +498,20 @@ def group_k_fold(num_folds, features, class_numbers, group_labels):
 
 
 def cross_validate(
-        base_model, bottleneck_file, tmp_dir, data_dir,
+        model, optimizer, bottleneck_file, tmp_dir, data_dir,
         groups=None, combine=None, exclude=None, 
-        num_folds=5, logo=False, use_weights=False, resample=None, optimizer=None, 
-        learning_rate=0.001, dropout_rate=0.5, epochs=10, batch_size=16,
-        summarize_model=True, summarize_misclassified_images=False):
-    """Use cross validation to evaluate final layers in transfer learning. 
+        num_folds=5, logo=False, use_weights=False, resample=None, 
+        epochs=10, batch_size=32, base_model=None, 
+        summarize_model=False, summarize_misclassified_images=False):
+    """Use cross validation to evaluate a Keras model. 
     
-    Prints validation and results summary. If group labels exist, the folds 
-    will split on groups.
+    If group labels exist, folds will split on groups. Prints training status 
+    and results summary. Raw results are also saved to 'tmp_dir/results' for 
+    further analysis.
 
     Inputs:
-        base_model: Keras model used to generate features, it's assumed the 
-            model's output is a vector
+        model: Keras model to be evaluated
+        optimizer: Keras optimizer to use when training model
         bottleneck_file: path to h5 file created by 'create_bottlenecks' function
         tmp_dir: path, 'results' directory of results saved here
         data_dir: path to directory of images used to calculate features 
@@ -526,16 +527,15 @@ def cross_validate(
         use_weights (optional): use class balance to scale the loss function 
             during training
         resample: float, oversamples so that the number of training samples in
-            each class is equal to (reasample * largest training class size)
-        optimizer (optional): Keras optimizer to use when training final layers
-        learning_rate (optional): model hyperparameter
-        dropout_rate (optional): model hyperparameter
+            each class is equal to (resample * largest training class size)
         epochs (optional): training parameter
         batch_size (optional): training parameter
+        base_model (optional): Keras model used to generate training features,
+            gets passed to summarize model
         summarize_model (optional): prints hyperparamter and model summary
         summarize_misclassified_images (optional): saves list of misclassified 
             image file names and random sample of misclassified images as a 
-            jpg in the 'results' folder
+            jpg in 'tmp_dir/results'
     """
 
     bottlenecks = load_bottlenecks(bottleneck_file)
@@ -593,6 +593,10 @@ def cross_validate(
     split_metrics = {}
     num_classes = len(set(class_numbers))
 
+    # training parameters/config summary
+    if summarize_model:
+        print_model_info(batch_size, epochs, model, optimizer, base_model)
+
     if group_labels[0] == '':
         print('\nPerforming stratified ', num_folds, '-fold cross validation...', sep='')
         cv = StratifiedKFold(n_splits=num_folds, shuffle=True)
@@ -604,6 +608,9 @@ def cross_validate(
         num_groups = len(set(group_labels))
         cv = LeaveOneGroupOut()
 
+    # used for resetting the model every cv split
+    model_config = keras.utils.serialize_keras_object(model)
+    optimizer_config = optimizer.get_config()
 
     # ROC only works for binary classification
     #from scipy import interp
@@ -669,10 +676,14 @@ def cross_validate(
             class_weight = dict(zip(np.unique(class_numbers), class_weight))
             print("Class Weights:", class_weight)
 
-        model = None # reset the model
-        model = create_final_layers(
-                base_model, num_classes, optimizer=optimizer, 
-                learning_rate=learning_rate, dropout_rate=dropout_rate)
+        # reset the model
+        K.clear_session() # fixes OOM errors?
+        model = model_from_config(model_config)
+        model.compile(
+                optimizer=optimizer.from_config(optimizer_config),
+                loss='categorical_crossentropy', 
+                metrics=['accuracy'])
+
         model.fit(features[train],
                   to_categorical(class_numbers[train]),
                   batch_size=batch_size,
@@ -821,11 +832,6 @@ def cross_validate(
                     print(group, " | count: ", len(indexes), " | accuracy: ", round(score, 4), sep="")
                     count += 1
             print(count, "problem groups.\n")
-
-    # training parameters/config summary
-    if summarize_model:
-        print_model_info(batch_size, epochs, learning_rate, dropout_rate, model, base_model)
-        print()
 
     # misclassified files
     if summarize_misclassified_images is not None:

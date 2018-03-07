@@ -207,21 +207,19 @@ def save_model_summary(filename, model):
     sys.stdout = sys.__stdout__
 
 
-def print_model_info(batch_size, epochs, learning_rate, dropout_rate, model, base_model=None):
+def print_model_info(batch_size, epochs, model, optimizer, base_model=None):
     print('--- Hyperparameter & Model Summary ---')
     if base_model is not None:
         print("Base Model:", base_model.name)
-        print("Feature Layer:", base_model.layers[-1].name)
+        print("Feature Extraction Layer:", base_model.layers[-1].name)
     print("Batch Size:", batch_size)
     print("Epochs:", epochs)
-    #print("Learning Rate:", learning_rate)
-    print("Dropout Rate:", dropout_rate)
-    print("Optimizer:", model.optimizer)
-    print("Optimizer Config:", model.optimizer.get_config())
-    #print("Model Config:", model.get_config())
-    print("Final Layers:")
+    print("Optimizer:", optimizer)
+    print("Optimizer Config:", optimizer.get_config())
+    print("Model Config:", model.get_config())
+    print("Model Layers:")
     model.summary()
-
+    print()
 
 def print_confusion_matrix(cm, labels,
                            hide_zeroes=False, hide_diagonal=False, hide_threshold=None,
