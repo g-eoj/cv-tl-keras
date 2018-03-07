@@ -45,7 +45,7 @@ def load_base_model(model_name, input_shape=None):
     else:
         print("Model name not recognized.")
         return
-    print('\n' + base_model.name, 'base model with input shape', base_model.input_shape, 'loaded.')
+    print(base_model.name, 'base model with input shape', base_model.input_shape, 'loaded.\n')
     return base_model
 
 
@@ -187,7 +187,7 @@ def combine_classes(combine, bottlenecks):
         class_indices[name] = i
 
     for new_class_name in combine:
-        print("\nMaking", new_class_name, "class from", combine[new_class_name])
+        print("Making", new_class_name, "class from", combine[new_class_name])
         # use encode() so all strings are bytes objects
         combine_labels = sorted([name.encode() for name in combine[new_class_name]])
         combine_numbers = sorted([class_indices[name] for name in combine_labels])
@@ -204,7 +204,7 @@ def combine_classes(combine, bottlenecks):
         for i, name in enumerate(classes):
             class_indices[name] = i
 
-    print("Updating class numbers...")
+    print("Updating class numbers...\n")
     class_numbers = np.array([class_indices[name] for name in class_labels])
 
     # convert bytes objects back to fixed length strings for compatability and speed
@@ -548,25 +548,14 @@ def cross_validate(
         classes = bottlenecks["classes"][:].astype(str)
 
     file_names = bottlenecks["file_names"][:].astype(str)
+
     if groups is not None:
         group_labels = bottlenecks[groups][:].astype(str)
-        ## temp hack to run tests on a single group
-        #camera_groups_labels = bottlenecks["camera_groups"][:].astype(str)
     else:
         group_labels = bottlenecks["blank_groups"][:].astype(str)
+
     features = bottlenecks["features"][:]
     bottlenecks.close()
-
-    ## temp hack to run tests on a single group
-    #exclude_cameras = ('UpperMostROWCamera', 'NorthernTowerMeadowCamera', 
-    #    'UpperROWWoodChipFieldCamera', 'UpperTrailCamera', 'SODPlotCamera')
-    #print("Removing", exclude_cameras, "groups.")
-    #excluded = exclude_groups(exclude_cameras, camera_groups_labels)
-    #class_labels = np.delete(class_labels, excluded, 0)
-    #file_names = np.delete(file_names, excluded, 0)
-    #group_labels = np.delete(group_labels, excluded, 0)
-    #features = np.delete(features, excluded, 0)
-    #class_numbers = np.delete(class_numbers, excluded, 0)
 
     if exclude is not None:
         print("Removing", exclude, "classes.")
@@ -579,7 +568,7 @@ def cross_validate(
         class_indices = {}
         for i, name in enumerate(classes):
             class_indices[name] = i
-        print("Updating class numbers...")
+        print("Updating class numbers...\n")
         class_numbers = np.array([class_indices[name] for name in class_labels])
 
     actual_classes = []
@@ -598,13 +587,13 @@ def cross_validate(
         print_model_info(batch_size, epochs, model, optimizer, base_model)
 
     if group_labels[0] == '':
-        print('\nPerforming stratified ', num_folds, '-fold cross validation...', sep='')
+        print('Performing stratified ', num_folds, '-fold cross validation...', sep='')
         cv = StratifiedKFold(n_splits=num_folds, shuffle=True)
     elif not logo:
-        print('\nPerforming group ', num_folds, '-fold cross validation...', sep='')
+        print('Performing group ', num_folds, '-fold cross validation...', sep='')
         cv = GroupKFold(n_splits=num_folds)
     else:
-        print('\nPerforming leave one group out cross validation...', sep='')
+        print('Performing leave one group out cross validation...', sep='')
         num_groups = len(set(group_labels))
         cv = LeaveOneGroupOut()
 
@@ -612,15 +601,6 @@ def cross_validate(
     model_config = keras.utils.serialize_keras_object(model)
     optimizer_config = optimizer.get_config()
 
-    # ROC only works for binary classification
-    #from scipy import interp
-    import matplotlib
-    matplotlib.use('Agg') 
-    import matplotlib.pyplot as plt
-    #from sklearn.metrics import roc_curve, auc
-    #tprs = []
-    #aucs = []
-    #mean_fpr = np.linspace(0, 1, 100)
 
     # cv.split will ignore group_labels if cv is StratifiedKFold
     for i, split in enumerate(cv.split(features, class_numbers, group_labels)):
@@ -722,17 +702,6 @@ def cross_validate(
         print_confusion_matrix(cm, classes, normalize=False)
         print()
 
-        # ROC curves, only works for two classes atm
-        #fpr, tpr, thresholds = roc_curve(class_numbers[test], predictions[:,1].reshape(-1))
-        #tprs.append(interp(mean_fpr, fpr, tpr))
-        #tprs[-1][0] = 0.0
-        #roc_auc = auc(fpr, tpr)
-        #aucs.append(roc_auc)
-        #plt.plot(fpr, tpr, lw=1, alpha=0.3,
-        #        #label='ROC fold %d (AUC = %0.2f)' % (i+1, roc_auc))
-        #        label='%s (AUC = %0.2f)' % (split_names[-1], roc_auc))
-        #if i == 5: break
-
     if not logo:
         print('--- ', num_folds, '-Fold Cross Validation Results ---', sep='')
     else:
@@ -744,13 +713,11 @@ def cross_validate(
         print("Accuracy by fold:", accuracy_scores)
     else:
         print("Accuracy by group:", accuracy_scores)
-    #print()
+    print()
 
     # f-score
-    #cms = [] # can probably remove
     f1s = []
     for key in split_metrics.keys():
-        #cms.append(split_metrics[key][2])
         f1s.append(split_metrics[key][1])
     f1s = np.vstack(f1s)
     f1_avgs = np.apply_along_axis(lambda v: np.mean(v[np.nonzero(v)]), 0, f1s)
@@ -767,47 +734,8 @@ def cross_validate(
     print_confusion_matrix(cm, classes)
     print()
 
-    # sanity check, should be the same as above
-    #cm = np.zeros(cms[0].shape)
-    #for a in cms:
-    #    cm = np.add(cm, a)
-    #print_confusion_matrix(cm, classes)
-    #print()
-
-    #ROC only works for 2 classes atm
-    #plt.plot([0,1], [0,1], linestyle='--', lw=2, color='r',
-    #        label='Luck', alpha=.8)
-
-    #mean_tpr = np.mean(tprs, axis=0)
-    #mean_tpr[-1] = 1.0
-    #mean_auc = auc(mean_fpr, mean_tpr)
-    #std_auc = np.std(aucs)
-    #plt.plot(mean_fpr, mean_tpr, color='b',
-    #         label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
-    #         lw=2, alpha=.8)
-
-    #std_tpr = np.std(tprs, axis=0)
-    #tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-    #tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-    #plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-    #    	     label=r'$\pm$ 1 std. dev.')
-
-    #plt.xlim([-0.05, 1.05])
-    #plt.ylim([-0.05, 1.05])
-    #plt.xlabel('False Positive Rate')
-    #plt.ylabel('True Positive Rate')
-    #if logo:
-    #    plt.title('ROC Leave One Group Out')
-    #else:
-    #    plt.title('ROC ' + str(num_folds) + 'Fold Cross Validation')
-    ##plt.legend(loc="lower right")
-    #plt.legend(loc="best")
-    ##plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-    #plt.savefig(tmp_dir + '/results/ROC.jpg')
-
     # data summary by split
-    print_class_balance(class_labels, class_numbers,
-                        splits, split_names)
+    print_class_balance(class_labels, class_numbers, splits, split_names)
 
     # summarize problem groups 
     summarize_problem_goups = False
@@ -834,16 +762,20 @@ def cross_validate(
             print(count, "problem groups.\n")
 
     # misclassified files
-    if summarize_misclassified_images is not None:
+    if summarize_misclassified_images:
+        import matplotlib
+        matplotlib.use('Agg') 
         import matplotlib.image as mpimg
+        import matplotlib.pyplot as plt
+
         print('--- Misclassified Files ---')
 
-        fig, axes = plt.subplots(25, 1)
-        fig.set_size_inches(5, 75)
+        fig, axes = plt.subplots(5, 2)
+        fig.set_size_inches(10, 10)
 
         #print('file_name predicted_class score')
         misclassified = np.argwhere(np.asarray(actual_classes) != np.asarray(predicted_classes))
-        misclassified_indexes = np.random.choice(misclassified.reshape(-1), 25, replace=False)
+        misclassified_indexes = np.random.choice(misclassified.reshape(-1), 10, replace=False)
         for i, axis in enumerate(axes.flat):
             #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
             m = misclassified_indexes[i]
@@ -867,11 +799,11 @@ def cross_validate(
             axis.spines["left"].set_visible(False)
         
         plt.tight_layout()
-        plt.savefig(tmp_dir + 'results/misclassified_images.jpg', format='jpg', dpi=300)
-        print("random sample of 25 misclassified images saved to", tmp_dir + 'results/misclassified_images.jpg')
+        plt.savefig(tmp_dir + 'results/misclassified_images.jpg', format='jpg')
+        print("random sample of 10 misclassified images saved to", tmp_dir + 'results/misclassified_images.jpg')
 
         classified = np.argwhere(np.asarray(actual_classes) == np.asarray(predicted_classes))
-        classified_indexes = np.random.choice(classified.reshape(-1), 25, replace=False)
+        classified_indexes = np.random.choice(classified.reshape(-1), 10, replace=False)
         for i, axis in enumerate(axes.flat):
             #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
             m = classified_indexes[i]
@@ -895,8 +827,8 @@ def cross_validate(
             axis.spines["left"].set_visible(False)
         
         plt.tight_layout()
-        plt.savefig(tmp_dir + 'results/classified_images.jpg', format='jpg', dpi=300)
-        print("random sample of 25 correctly classified images saved to", tmp_dir + 'results/classified_images.jpg')
+        plt.savefig(tmp_dir + 'results/classified_images.jpg', format='jpg')
+        print("random sample of 10 correctly classified images saved to", tmp_dir + 'results/correctly_classified_images.jpg')
         
         csv = tmp_dir + 'results/misclassified_images.csv'
         with open(csv, 'w', newline="") as f:
@@ -905,4 +837,5 @@ def cross_validate(
                 row = file_names_test[m] + ',' + classes[predicted_classes[m]] + ',' + str(prediction_scores[m])
                 f.write("%s\n" % row)
         print("csv of all misclassified images saved to", csv)
-
+        print()
+    
