@@ -27,7 +27,16 @@ os.environ['TF_CPP_MIN_LOG_LEVEL']='2' # Suppress TensorFlow message about CPU f
 
 
 def load_base_model(model_name, input_shape=None):
-    """Load pre-trained model without final layers."""
+    """Load pre-trained model without final layers.
+    
+    Accepted model names: 'InceptionV3', 'ResNet50', and 'VGG16'.
+    Optional input shape:
+        'InceptionV3': minimum (75, 75, 3), default (299, 299, 3)
+        'ResNet50': minimum (32, 32, 3), default (224, 224, 3)
+        'VGG16': minimum (32, 32, 3), default (224, 224, 3)
+        
+    For more info see: https://keras.io/applications/
+    """
 
     # Need include_top=False and pooling='avg' to generate bottleneck features
     if model_name == 'InceptionV3':
