@@ -27,17 +27,18 @@ if not os.path.exists('cifar10-subset'):
     subprocess.call('python ./cifar10-as-jpgs.py', shell=True)
 
 # setup paths
-data_dir = './cifar10-subset/' # contains images in labeled folders
-tmp_dir = './tmp/' 
-bottleneck_file = tmp_dir + 'cifar10-subset-vgg16-bottlenecks.h5'
+data_dir = 'cifar10-subset' # contains images in labeled folders
+tmp_dir = 'tmp' 
+bottleneck_file = os.path.join(tmp_dir, 'cifar10-subset-vgg16-bottlenecks.h5')
 
 # remove any results files from previous runs
-if os.path.exists(tmp_dir + 'results'):
-    shutil.rmtree(tmp_dir + 'results')
-os.makedirs(tmp_dir + 'results')
+results_dir = os.path.join(tmp_dir, 'results')
+if os.path.exists(results_dir):
+    shutil.rmtree(results_dir)
+os.makedirs(results_dir)
 
 # save terminal output to file
-sys.stdout = report.Logger(tmp_dir + 'results/')
+sys.stdout = report.Logger(results_dir)
 
 # display summary of images in data_dir
 report.data_summary(data_dir)

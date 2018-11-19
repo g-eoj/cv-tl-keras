@@ -149,7 +149,7 @@ def create_bottlenecks(bottleneck_file, data_dir, base_model, groups_files=[]):
         group_labels = ['' for name in file_names]
         bottlenecks.create_dataset('blank_groups', data=np.array(group_labels, dtype='S'))
         for groups_file in groups_files:
-            groups_type = groups_file.split('/')[-1].split('.')[0]
+            groups_type = os.path.basename(groups_file).split('.')[0]
             groups = group_dict(groups_file)
             group_labels = [groups[name] for name in file_names] 
             bottlenecks.create_dataset(groups_type, data=np.array(group_labels, dtype='S'))
@@ -473,11 +473,11 @@ def train_and_evaluate(
         from keras.optimizers import SGD
         model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
 
-        model.save(tmp_dir + base_model.name + '-retrained-model.h5')
-        print("\nModel saved to:", tmp_dir + base_model.name + '-retrained-model.h5')
+        model.save(os.path.join(tmp_dir, base_model.name + '-retrained-model.h5'))
+        print("\nModel saved to:", os.path.join(tmp_dir, base_model.name + '-retrained-model.h5'))
         # TODO save txt file of class:number for use in prediction
         # capture retrained model architecture with final layers
-        save_model_summary(tmp_dir + base_model.name + '-retrained-model-summary.txt', model)
+        save_model_summary(os.path.join(tmp_dir, base_model.name + '-retrained-model-summary.txt'), model)
 
 
 def group_k_fold(num_folds, features, class_numbers, group_labels):
@@ -590,6 +590,7 @@ def cross_validate(
     split_names = []
     split_metrics = {}
     num_classes = len(set(class_numbers))
+    results_dir = os.path.join(tmp_dir, 'results')
 
     # training parameters/config summary
     if summarize_model:
@@ -689,8 +690,8 @@ def cross_validate(
                       group_labels[test].reshape((-1,1)),
                       predictions))
         header = 'file_name,actual_class,group_name,score ' + ',score '.join(classes)
-        np.savetxt(tmp_dir + 'results/' + split_names[-1] + '.csv', csv, 
-                delimiter=',', header=header, comments='', fmt='%s')
+        np.savetxt(os.path.join(results_dir, split_names[-1] + '.csv'), csv,
+                   delimiter=',', header=header, comments='', fmt='%s')
 
         predicted_classes_this_split = np.argmax(predictions, axis=1)
         predicted_classes.extend(predicted_classes_this_split)
@@ -788,7 +789,7 @@ def cross_validate(
         for i, axis in enumerate(axes.flat):
             #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
             m = misclassified_indexes[i]
-            image_path = data_dir + '/' + file_names_test[m]
+            image_path = os.path.join(data_dir, file_names_test[m])
             image = mpimg.imread(image_path)
             axis.imshow(image)
             xlabel = "File: %s\nTrue: %s\nPred: %s (%.3f)" % (
@@ -808,15 +809,15 @@ def cross_validate(
             axis.spines["left"].set_visible(False)
         
         plt.tight_layout()
-        plt.savefig(tmp_dir + 'results/misclassified_images.jpg', format='jpg')
-        print("random sample of 10 misclassified images saved to", tmp_dir + 'results/misclassified_images.jpg')
+        plt.savefig(os.path.join(results_dir, 'misclassified_images.jpg'), format='jpg')
+        print("random sample of 10 misclassified images saved to", os.path.join(results_dir, 'misclassified_images.jpg'))
 
         classified = np.argwhere(np.asarray(actual_classes) == np.asarray(predicted_classes))
         classified_indexes = np.random.choice(classified.reshape(-1), 10, replace=False)
         for i, axis in enumerate(axes.flat):
             #print(file_names_test[m], classes[predicted_classes[m]], prediction_scores[m]) 
             m = classified_indexes[i]
-            image_path = data_dir + '/' + file_names_test[m]
+            image_path = os.path.join(data_dir, file_names_test[m])
             image = mpimg.imread(image_path)
             axis.imshow(image)
             xlabel = "File: %s\nTrue: %s\nPred: %s (%.3f)" % (
@@ -836,10 +837,10 @@ def cross_validate(
             axis.spines["left"].set_visible(False)
         
         plt.tight_layout()
-        plt.savefig(tmp_dir + 'results/classified_images.jpg', format='jpg')
-        print("random sample of 10 correctly classified images saved to", tmp_dir + 'results/correctly_classified_images.jpg')
+        plt.savefig(os.path.join(results_dir, 'classified_images.jpg'), format='jpg')
+        print("random sample of 10 correctly classified images saved to", os.path.join(results_dir, 'classified_images.jpg'))
         
-        csv = tmp_dir + 'results/misclassified_images.csv'
+        csv = os.path.join(results_dir, 'misclassified_images.csv')
         with open(csv, 'w', newline="") as f:
             f.write('file_name,predicted_class,score\n')
             for m in misclassified.reshape(-1):

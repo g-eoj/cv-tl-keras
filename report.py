@@ -11,7 +11,7 @@ class Logger(object):
 
     def __init__(self, path):
         self.terminal = sys.stdout
-        self.log = open(path + 'log.txt', 'w')
+        self.log = open(os.path.join(path, 'log.txt'), 'w')
 
     def isatty(self):
         return self.terminal.isatty()
@@ -67,8 +67,8 @@ def data_summary(data_dir, groups_file=None, csv=None):
             print("-"*(class_width+group_width+3+8)) 
             file_names = os.listdir(os.path.join(data_dir, class_name))
             group = []
-            for file_name in file_names:
-                group.append(groups[class_name + "/" + file_name])
+            for file_name in file_names:                
+                group.append(groups[os.path.join(class_name, file_name)])
             group_counts = Counter(group)
             groups_discovered |= set(group)
             for i, group_name in enumerate(sorted(group_counts.keys())):
@@ -99,7 +99,7 @@ def data_summary(data_dir, groups_file=None, csv=None):
             group = []
             file_names = os.listdir(os.path.join(data_dir, class_name))
             for file_name in file_names:
-                group.append(groups[class_name + "/" + file_name])
+                group.append(groups[os.path.join(class_name, file_name)])
             group_counts = Counter(group)
             for group_name in group_names:
                 if group_name in group_counts.keys(): 
