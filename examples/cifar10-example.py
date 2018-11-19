@@ -8,8 +8,6 @@ Uses 100 random images from each cifar10 class. Shows how to:
 """
 
 import os
-import report
-import retrain
 import shutil
 import subprocess
 import sys
@@ -20,6 +18,11 @@ from keras import optimizers
 from keras.layers import Dense, Dropout, Flatten, GlobalAveragePooling2D, Input
 from keras.models import Model, Sequential
 
+# import modules from parent directory
+sys.path.append('../')
+import report
+import retrain
+
 
 # download and save a subset of cifar10 if needed
 if not os.path.exists('cifar10-subset'):
@@ -28,7 +31,7 @@ if not os.path.exists('cifar10-subset'):
 
 # setup paths
 data_dir = 'cifar10-subset' # contains images in labeled folders
-tmp_dir = 'tmp' 
+tmp_dir = 'tmp'
 bottleneck_file = os.path.join(tmp_dir, 'cifar10-subset-vgg16-bottlenecks.h5')
 
 # remove any results files from previous runs
@@ -57,13 +60,13 @@ combine = {'animals': ('cat', 'deer', 'dog', 'frog', 'horse'),
 # define classes to exclude
 exclude = ('bird', )
 
-# define Keras model 
+# define Keras model
 # the model will be trained on features stored in the bottleneck file
 # and will classify images into the 2 new classes we defined
 model = Sequential(name='final_layers')
 model.add(Dense(
-    units=256, 
-    activation='relu', 
+    units=256,
+    activation='relu',
     input_shape=base_model.output_shape[1:]))
 model.add(Dropout(0.5))
 # want to classify the 2 new classes
@@ -78,14 +81,14 @@ model.add(Dense(units=2, activation='softmax'))
 
 # define optimizer
 optimizer = optimizers.Adam()
-               
+
 # cross validate model using oversampling to balance classes,
-# see the docstring of retrain.cross_validate() for more 
+# see the docstring of retrain.cross_validate() for more
 # cross validation options
 retrain.cross_validate(
-        model, optimizer, bottleneck_file, tmp_dir, data_dir, 
-        combine=combine, exclude=exclude, resample=1.0, 
-        base_model=base_model, summarize_model=True, 
+        model, optimizer, bottleneck_file, tmp_dir, data_dir,
+        combine=combine, exclude=exclude, resample=1.0,
+        base_model=base_model, summarize_model=True,
         summarize_misclassified_images=True)
 
 K.clear_session() # prevent TensorFlow error message

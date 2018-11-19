@@ -8,7 +8,7 @@ from scipy import misc
 
 n = 100 # number of images to save per class
 
-class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 
+class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog',
                'horse', 'ship', 'truck']
 
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
@@ -23,7 +23,7 @@ for name in class_names:
 idxs = []
 for i in range(len(class_names)):
     idxs += np.random.choice(
-            np.where(y_train == i)[0], 
+            np.where(y_train == i)[0],
             n, replace=False).tolist()
 
 # save images as jpgs

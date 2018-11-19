@@ -7,7 +7,8 @@ from collections import Counter
 
 
 class Logger(object):
-    """Saves terminal output to log file."""
+    """Saves terminal output to log file.
+    """
 
     def __init__(self, path):
         self.terminal = sys.stdout
@@ -42,9 +43,9 @@ def data_summary(data_dir, groups_file=None, csv=None):
     """Summarizes counts for images in data_dir.
 
     Inputs:
-        data_dir: path to directory of images (where images are in a 
+        data_dir: path to directory of images (where images are in a
             subdirectory for each class)
-        groups_file (optional): file path to csv which have rows with the 
+        groups_file (optional): file path to csv which have rows with the
             format: file_name,group
         csv (optional): file path to save csv of counts, if groups_file exists
     """
@@ -58,16 +59,16 @@ def data_summary(data_dir, groups_file=None, csv=None):
         groups = group_dict(groups_file)
         group_names = sorted(Counter(groups.values()).keys())
         group_width = max([len(x) for x in group_names] + [5])
-        groups_discovered = set() # needed since it's possible to use a groups_file 
+        groups_discovered = set() # needed since it's possible to use a groups_file
                                   # that lists groups not used in the data_dir
         print('{0:>{1}}'.format("Class", class_width), end="   ")
         print('{0:>{1}}'.format("Group", group_width), end="")
         print('{0:>8}'.format("Count"))
         for class_name in class_names:
-            print("-"*(class_width+group_width+3+8)) 
+            print("-"*(class_width+group_width+3+8))
             file_names = os.listdir(os.path.join(data_dir, class_name))
             group = []
-            for file_name in file_names:                
+            for file_name in file_names:
                 group.append(groups[os.path.join(class_name, file_name)])
             group_counts = Counter(group)
             groups_discovered |= set(group)
@@ -82,7 +83,7 @@ def data_summary(data_dir, groups_file=None, csv=None):
             print('{0:>{1}}'.format("Total", group_width), end="")
             print('{0:>8}'.format(len(file_names)))
             grand_total += len(file_names)
-        print("-"*(class_width+group_width+3+8)) 
+        print("-"*(class_width+group_width+3+8))
 
         rows = []
         class_totals = []
@@ -94,7 +95,7 @@ def data_summary(data_dir, groups_file=None, csv=None):
         row += "total"
         rows.append(row)
         for class_name in class_names:
-            row = class_name + "," 
+            row = class_name + ","
             total = 0
             group = []
             file_names = os.listdir(os.path.join(data_dir, class_name))
@@ -102,7 +103,7 @@ def data_summary(data_dir, groups_file=None, csv=None):
                 group.append(groups[os.path.join(class_name, file_name)])
             group_counts = Counter(group)
             for group_name in group_names:
-                if group_name in group_counts.keys(): 
+                if group_name in group_counts.keys():
                     row += str(group_counts[group_name]) + ","
                     total += group_counts[group_name]
                     group_totals[group_name] += group_counts[group_name]
@@ -117,25 +118,25 @@ def data_summary(data_dir, groups_file=None, csv=None):
         row += str(grand_total)
         rows.append(row)
 
-        print(len(class_names), "classes |", 
+        print(len(class_names), "classes |",
               len(groups_discovered), "groups |",
-              grand_total, "images") 
+              grand_total, "images")
         counts = list(group_totals.values())
-        print("median class size:", round(np.median(class_totals), 2), 
+        print("median class size:", round(np.median(class_totals), 2),
               "| mad:", round(np.median(
-                  np.abs(np.array(class_totals) - np.median(class_totals))))) 
-        print("mean class size:", round(np.mean(class_totals), 2), 
+                  np.abs(np.array(class_totals) - np.median(class_totals)))))
+        print("mean class size:", round(np.mean(class_totals), 2),
               "| sd:", round(np.std(class_totals), 2))
-        print("median group size:", round(np.median(counts), 2), 
+        print("median group size:", round(np.median(counts), 2),
               "| mad:", round(np.median(
-                  np.abs(np.array(counts) - np.median(counts))))) 
-        print("mean group size:", round(np.mean(counts), 2), 
+                  np.abs(np.array(counts) - np.median(counts)))))
+        print("mean group size:", round(np.mean(counts), 2),
               "| sd:", round(np.std(counts), 2))
         print()
 
         # csv
-        for row in rows:
-            print(row)
+        #for row in rows:
+        #    print(row)
         if csv is not None:
             with open(csv, 'w', newline="") as f:
                 for row in rows:
@@ -144,7 +145,7 @@ def data_summary(data_dir, groups_file=None, csv=None):
     else:
         print('{0:>{1}}'.format("Class", class_width), end="   ")
         print('{0:>8}'.format("Count"))
-        print("-"*(class_width+3+8)) 
+        print("-"*(class_width+3+8))
         class_totals =[]
         for class_name in class_names:
             file_names = os.listdir(os.path.join(data_dir, class_name))
@@ -152,18 +153,18 @@ def data_summary(data_dir, groups_file=None, csv=None):
             print('{0:>8}'.format(len(file_names)))
             class_totals.append(len(file_names))
             grand_total += len(file_names)
-        print("-"*(class_width+3+8)) 
-        print(len(class_names), "classes |", 
-              grand_total, "images") 
-        print("median class size:", round(np.median(class_totals), 2), 
+        print("-"*(class_width+3+8))
+        print(len(class_names), "classes |",
+              grand_total, "images")
+        print("median class size:", round(np.median(class_totals), 2),
               "| mad:", round(np.median(
-                  np.abs(np.array(class_totals) - np.median(class_totals))))) 
-        print("mean class size:", round(np.mean(class_totals), 2), 
+                  np.abs(np.array(class_totals) - np.median(class_totals)))))
+        print("mean class size:", round(np.mean(class_totals), 2),
               "| sd:", round(np.std(class_totals), 2))
     print()
 
 
-def print_class_balance(class_labels, class_numbers, 
+def print_class_balance(class_labels, class_numbers,
                         fold_labels, fold_names):
     class_label_names = sorted(set(class_labels))
     first_column_width = max([len(x) for x in fold_names] + [5])  # 5 is value length
@@ -179,7 +180,7 @@ def print_class_balance(class_labels, class_numbers,
     print()
 
     # Print rows
-    for i, fold_name in enumerate(fold_names): 
+    for i, fold_name in enumerate(fold_names):
         print("    %{0}s".format(first_column_width) % fold_name, end=" ")
         counts = Counter(fold_labels[i])
         for j in range(len(class_label_names)):
@@ -221,10 +222,13 @@ def print_model_info(batch_size, epochs, model, optimizer, base_model=None):
     model.summary()
     print()
 
+
 def print_confusion_matrix(cm, labels,
                            hide_zeroes=False, hide_diagonal=False, hide_threshold=None,
                            normalize=True):
-    """pretty print for confusion matrixes"""
+    """pretty print for confusion matrixes
+    """
+
     if normalize:
         np.seterr(divide='ignore', invalid='ignore')
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
@@ -254,83 +258,3 @@ def print_confusion_matrix(cm, labels,
             print(cell, end=" ")
         print()
 
-
-def getROC(ground_truth, scores, class_list):
-    # Compute ROC curve and ROC area for each class
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
-    ground_truth = np.array(ground_truth);
-    scores = np.array(scores);
-    scores = np.squeeze(scores)
-    for i in range(len(class_list)):
-        (fpr[i], tpr[i], _) = roc_curve(ground_truth[:, i], scores[:, i])
-        roc_auc[i] = auc(fpr[i], tpr[i])
-    return (fpr, tpr, roc_auc)
-
-
-def multiClassROC(fpr, tpr, roc_auc, class_list,):
-    n_classes = len(class_list)
-    lw = 2  # line width
-
-    # Compute macro-average ROC curve and ROC area
-
-    # First aggregate all false positive rates
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
-
-    # Then interpolate all ROC curves at this points
-    mean_tpr = np.zeros_like(all_fpr)
-    for i in range(n_classes):
-        mean_tpr += interp(all_fpr, fpr[i], tpr[i])
-
-    # Finally average it and compute AUC
-    mean_tpr /= n_classes
-
-    fpr['macro'] = all_fpr
-    tpr['macro'] = mean_tpr
-    roc_auc['macro'] = auc(fpr['macro'], tpr['macro'])
-
-    # Plot all ROC curves
-    # fig = plt.figure()
-
-    plt.plot(
-        fpr['macro'],
-        tpr['macro'],
-        label='macro (a = {0:0.2f})'.format(roc_auc['macro']),
-        color='navy',
-        linestyle=':',
-        linewidth=4,
-        )
-
-    colors = cycle([
-        'aqua',
-        'darkorange',
-        'cornflowerblue',
-        'green',
-        'red',
-        'blue',
-        'black',
-        ])
-    for (i, color) in zip(range(n_classes), colors):
-        plt.plot(fpr[i], tpr[i], color=color, lw=lw,
-                 label='{0} (a={1:0.2f})'.format(class_list[i],
-                 roc_auc[i]))
-
-    plt.plot([0, 1], [0, 1], 'k--', lw=lw)
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('ROC plot')
-    plt.legend(loc='lower right')
-    plt.savefig('test_ROC.png')
-
-
-# plt.show()
-
-'''
-def save_roc(actual_classes, 
-    class_list = sorted(set(class_labels))
-    (fpr, tpr, roc_auc) = getROC(truth, prediction_scores_list, class_list)
-    multiClassROC(fpr, tpr, roc_auc, class_list)
-'''
